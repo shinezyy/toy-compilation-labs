@@ -154,5 +154,6 @@ set(SOURCE_FILES
 
 include_directories(ast-interpreter)
 include_directories(include)
+include_directories(llvm-include)
 
 add_executable(clang_devel_clion ${SOURCE_FILES})
