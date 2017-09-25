@@ -1,2 +1,8 @@
 .idea/
 cmake-build-debug/
+ast-interpreter/.cproject
+ast-interpreter/.project
+ast-interpreter/CMakeLists.txt
+include/
+llvm-include/
+

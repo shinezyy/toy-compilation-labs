@@ -3,6 +3,7 @@ rsync -arzvL --update \
     --exclude=.idea \
     --exclude=.git \
     --exclude=include \
+    --exclude=llvm-include \
     --no-perms --no-owner --no-group \
     -e 'ssh -p 11022' \
     . \
