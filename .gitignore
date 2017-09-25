@@ -1,4 +1,2 @@
-ast-interpreter/.cproject
-ast-interpreter/.project
-ast-interpreter/CMakeLists.txt
-include/
+.idea/
+cmake-build-debug/
