@@ -1,6 +1,6 @@
 //==--- tools/clang-check/ClangInterpreter.cpp - Clang Interpreter tool --------------===//
 //===----------------------------------------------------------------------===//
-#include <stdio.h>
+#include <cstdio>
 
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/Decl.h"
@@ -8,6 +8,8 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendAction.h"
 #include "clang/Tooling/Tooling.h"
+
+#include "log.h"
 
 using namespace clang;
 
@@ -103,13 +105,15 @@ class Environment {
     FunctionDecl *mEntry;
 public:
     /// Get the declartions to the built-in functions
-    Environment() : mStack(), mFree(NULL), mMalloc(NULL), mInput(NULL), mOutput(NULL), mEntry(NULL) {
+    Environment() : mStack(), mFree(nullptr), mMalloc(nullptr),
+                    mInput(nullptr), mOutput(nullptr), mEntry(nullptr) {
     }
 
 
     /// Initialize the Environment
     void init(TranslationUnitDecl *unit) {
-        for (TranslationUnitDecl::decl_iterator i = unit->decls_begin(), e = unit->decls_end(); i != e; ++i) {
+        for (TranslationUnitDecl::decl_iterator i = unit->decls_begin(),
+                     e = unit->decls_end(); i != e; ++i) {
             if (FunctionDecl *fdecl = dyn_cast<FunctionDecl>(*i)) {
                 if (fdecl->getName().equals("FREE")) mFree = fdecl;
                 else if (fdecl->getName().equals("MALLOC")) mMalloc = fdecl;
@@ -125,8 +129,20 @@ public:
         return mEntry;
     }
 
+    int getDeclOrStmtVal(Expr *expr) {
+        if (DeclRefExpr *declexpr = dyn_cast<DeclRefExpr>(expr)) {
+            assert(false);
+            Decl *decl = declexpr->getFoundDecl();
+            return mStack.front().getDeclVal(decl);
+        } else {
+            return mStack.front().getStmtVal(expr);
+        }
+    }
+
     /// !TODO Support comparison operation
     void binop(BinaryOperator *bop) {
+        mStack.front().setPC(bop);
+
         Expr *left = bop->getLHS();
         Expr *right = bop->getRHS();
 
@@ -137,17 +153,48 @@ public:
                 Decl *decl = declexpr->getFoundDecl();
                 mStack.front().bindDecl(decl, val);
             }
-        } else if (bop->isComparisonOp()) {
+            log("binding value %d with decl\n", val);
+            if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(left)) {
+                if (VarDecl *VD = dyn_cast<VarDecl>(declRefExpr->getDecl())) {
+                    log("casting %s with value %d\n",
+                        VD->getQualifiedNameAsString().c_str(), val);
+                }
+            }
 
+        } else if (bop->isComparisonOp()) {
+            int left_value = getDeclOrStmtVal(left);
+            int right_value = getDeclOrStmtVal(right);
+            bool result;
+            log_var_s(left_value);
+            log_var_s(right_value);
+            switch (bop->getOpcode()) {
+                case BO_LT: result = left_value < right_value;
+                    break;
+                case BO_GT: result = left_value > right_value;
+                    break;
+                case BO_EQ: result = left_value == right_value;
+                    break;
+                default: assert(false);
+            }
+            mStack.front().bindStmt(bop, result);
+            if (DeclRefExpr *declexpr = dyn_cast<DeclRefExpr>(bop)) {
+                assert(false);
+                Decl *decl = declexpr->getFoundDecl();
+                mStack.front().bindDecl(decl, result);
+            }
         }
     }
 
     void decl(DeclStmt *declstmt) {
-        for (DeclStmt::decl_iterator it = declstmt->decl_begin(), ie = declstmt->decl_end();
+        for (DeclStmt::decl_iterator it = declstmt->decl_begin(),
+                     ie = declstmt->decl_end();
              it != ie; ++it) {
             Decl *decl = *it;
-            if (VarDecl *vardecl = dyn_cast<VarDecl>(decl)) {
-                mStack.front().bindDecl(vardecl, 0);
+            if (VarDecl *var_decl = dyn_cast<VarDecl>(decl)) {
+                const Expr *expr = var_decl->getInit();
+                const IntegerLiteral *IL = dyn_cast<IntegerLiteral>(expr);
+                int val = static_cast<int>(IL->getValue().getLimitedValue());
+                mStack.front().bindDecl(var_decl, val);
             }
         }
     }
@@ -159,6 +206,7 @@ public:
 
             int val = mStack.front().getDeclVal(decl);
             mStack.front().bindStmt(declref, val);
+            log("binding value %d\n", val);
         }
     }
 
@@ -168,6 +216,17 @@ public:
             Expr *expr = castexpr->getSubExpr();
             int val = mStack.front().getStmtVal(expr);
             mStack.front().bindStmt(castexpr, val);
+
+            log("binding value %d\n", val);
+            if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(castexpr)) {
+                if (VarDecl *VD = dyn_cast<VarDecl>(declRefExpr->getDecl())) {
+                    log("casting %s with value %d\n",
+                        VD->getQualifiedNameAsString().c_str(), val);
+                }
+            }
+
+        } else if (castexpr->getType()->isLValueReferenceType()) {
+
         }
     }
 

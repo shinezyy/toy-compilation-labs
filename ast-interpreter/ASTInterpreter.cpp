@@ -17,7 +17,7 @@ public:
     explicit InterpreterVisitor(const ASTContext &context, Environment *env)
             : EvaluatedExprVisitor(context), mEnv(env) {}
 
-    virtual ~InterpreterVisitor() {}
+    virtual ~InterpreterVisitor() = default;
 
     virtual void VisitBinaryOperator(BinaryOperator *bop) {
         VisitStmt(bop);

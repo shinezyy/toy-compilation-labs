@@ -150,7 +150,8 @@ set(SOURCE_FILES
         include/clang/Tooling/Refactoring.h
         include/clang/Tooling/RefactoringCallbacks.h
         include/clang/Tooling/ReplacementsYaml.h
-        include/clang/Tooling/Tooling.h)
+        include/clang/Tooling/Tooling.h
+        ast-interpreter/log.h)
 
 include_directories(ast-interpreter)
 include_directories(include)
