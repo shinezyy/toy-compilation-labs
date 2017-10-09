@@ -103,6 +103,7 @@ class Environment {
     FunctionDecl *mOutput;
 
     FunctionDecl *mEntry;
+
 public:
     /// Get the declartions to the built-in functions
     Environment() : mStack(), mFree(nullptr), mMalloc(nullptr),
@@ -129,20 +130,8 @@ public:
         return mEntry;
     }
 
-    int getDeclOrStmtVal(Expr *expr) {
-        if (DeclRefExpr *declexpr = dyn_cast<DeclRefExpr>(expr)) {
-            assert(false);
-            Decl *decl = declexpr->getFoundDecl();
-            return mStack.front().getDeclVal(decl);
-        } else {
-            return mStack.front().getStmtVal(expr);
-        }
-    }
-
     /// !TODO Support comparison operation
     void binop(BinaryOperator *bop) {
-        mStack.front().setPC(bop);
-
         Expr *left = bop->getLHS();
         Expr *right = bop->getRHS();
 
@@ -153,20 +142,14 @@ public:
                 Decl *decl = declexpr->getFoundDecl();
                 mStack.front().bindDecl(decl, val);
             }
-            log("binding value %d with decl\n", val);
-            if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(left)) {
-                if (VarDecl *VD = dyn_cast<VarDecl>(declRefExpr->getDecl())) {
-                    log("casting %s with value %d\n",
-                        VD->getQualifiedNameAsString().c_str(), val);
-                }
-            }
+            log(ValueBinding, "binding value %d with decl\n", val);
 
         } else if (bop->isComparisonOp()) {
-            int left_value = getDeclOrStmtVal(left);
-            int right_value = getDeclOrStmtVal(right);
+            int left_value = mStack.front().getStmtVal(left);
+            int right_value = mStack.front().getStmtVal(right);
             bool result;
-            log_var_s(left_value);
-            log_var_s(right_value);
+            log_var_s(ValueBinding, left_value);
+            log_var_s(ValueBinding, right_value);
             switch (bop->getOpcode()) {
                 case BO_LT: result = left_value < right_value;
                     break;
@@ -191,10 +174,16 @@ public:
              it != ie; ++it) {
             Decl *decl = *it;
             if (VarDecl *var_decl = dyn_cast<VarDecl>(decl)) {
-                const Expr *expr = var_decl->getInit();
-                const IntegerLiteral *IL = dyn_cast<IntegerLiteral>(expr);
-                int val = static_cast<int>(IL->getValue().getLimitedValue());
-                mStack.front().bindDecl(var_decl, val);
+                if (Expr *expr = var_decl->getInit()) {
+                    if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(expr)) {
+                        // TODO: support negative number
+                        int val = static_cast<int>(IL->getValue().getLimitedValue());
+                        mStack.front().bindDecl(var_decl, val);
+                    }
+                } else {
+                    // TODO: Let consumer know "This is default value"
+                    mStack.front().bindDecl(var_decl, 0);
+                }
             }
         }
     }
@@ -202,11 +191,10 @@ public:
     void declref(DeclRefExpr *declref) {
         mStack.front().setPC(declref);
         if (declref->getType()->isIntegerType()) {
-            Decl *decl = declref->getFoundDecl();
-
-            int val = mStack.front().getDeclVal(decl);
-            mStack.front().bindStmt(declref, val);
-            log("binding value %d\n", val);
+            if (Decl *decl = declref->getFoundDecl()) {
+                int val = mStack.front().getDeclVal(decl);
+                mStack.front().bindStmt(declref, val);
+            }
         }
     }
 
@@ -216,17 +204,6 @@ public:
             Expr *expr = castexpr->getSubExpr();
             int val = mStack.front().getStmtVal(expr);
             mStack.front().bindStmt(castexpr, val);
-
-            log("binding value %d\n", val);
-            if (DeclRefExpr *declRefExpr = dyn_cast<DeclRefExpr>(castexpr)) {
-                if (VarDecl *VD = dyn_cast<VarDecl>(declRefExpr->getDecl())) {
-                    log("casting %s with value %d\n",
-                        VD->getQualifiedNameAsString().c_str(), val);
-                }
-            }
-
-        } else if (castexpr->getType()->isLValueReferenceType()) {
-
         }
     }
 

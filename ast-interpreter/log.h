@@ -3,46 +3,50 @@
 
 #include <string>
 
-#define ZYY_DEBUG false
+// Overall debug flag
+#define ZYY_DEBUG true
 
-#define log(format,...) \
+// separated debug flags
+#define ValueBinding false
+
+#define log(debug_flags, format,...) \
     do {\
-        if (ZYY_DEBUG) { \
+        if (ZYY_DEBUG && (debug_flags)) { \
             fprintf(stderr, "%s,%d: " format, \
                     __func__, __LINE__, ## __VA_ARGS__), \
                     fflush(stderr); \
         }\
-    } while(0)
+    } while(false)
 
 
-#define log_var(x) \
+#define log_var(debug_flags, x) \
     do {\
-        if (ZYY_DEBUG) { \
+        if (ZYY_DEBUG && (debug_flags)) { \
             fprintf(stderr, "%s,%d: " "%s is %d\n", \
                     __func__, __LINE__, #x, x), \
                     fflush(stderr); \
         }\
-    } while(0)
+    } while(false)
 
 // short:
-#define log_var_s(x) \
+#define log_var_s(debug_flags, x) \
     do {\
-        if (ZYY_DEBUG) { \
+        if (ZYY_DEBUG && (debug_flags)) { \
             fprintf(stderr, "%s is %d\n", \
                     #x, x), \
                     fflush(stderr); \
         }\
-    } while(0)
+    } while(false)
 
 
-#define log_var_cond(b, x) \
+#define log_var_cond(debug_flags, condition, x) \
     do {\
-        if (ZYY_DEBUG && b) { \
+        if (ZYY_DEBUG && (debug_flags) && (condition)) { \
             fprintf(stderr, "%s,%d: " "%s is %d\n", \
                    __func__, __LINE__, #x, x), \
                 fflush(stderr); \
         }\
-    } while(0)
+    } while(false)
 
 
 #endif
