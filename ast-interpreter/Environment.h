@@ -39,7 +39,22 @@ public:
     }
 
     int getStmtVal(Stmt *stmt) {
-        assert (mExprs.find(stmt) != mExprs.end());
+        if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(stmt)) {
+            int val = static_cast<int>(IL->getValue().getLimitedValue());
+            return val;
+        }
+
+        if (mExprs.find(stmt) == mExprs.end()) {
+            clang::LangOptions LangOpts;
+            LangOpts.CPlusPlus = static_cast<unsigned int>(true);
+            clang::PrintingPolicy Policy(LangOpts);
+            std::string stmt_str;
+            llvm::raw_string_ostream rso(stmt_str);
+            stmt->printPretty(rso, nullptr, Policy);
+
+            log(FunctionCall, "No binding value found for var %s\n", rso.str().c_str());
+            assert(false);
+        }
         return mExprs[stmt];
     }
 
@@ -50,8 +65,6 @@ public:
     Stmt *getPC() {
         return mPC;
     }
-
-    std::vector<int> mParameters;
 };
 
 /// Heap maps address to a value
@@ -147,10 +160,10 @@ public:
             }
             log(ValueBinding, "binding value %d with decl\n", val);
 
-        } else if (bop->isComparisonOp()) {
+        } else if (bop->isComparisonOp() || bop->isAdditiveOp()) {
             int left_value = mStack.front().getStmtVal(left);
             int right_value = mStack.front().getStmtVal(right);
-            bool result;
+            int result;
             log_var_s(ValueBinding, left_value);
             log_var_s(ValueBinding, right_value);
             switch (bop->getOpcode()) {
@@ -159,6 +172,10 @@ public:
                 case BO_GT: result = left_value > right_value;
                     break;
                 case BO_EQ: result = left_value == right_value;
+                    break;
+                case BO_Add: result = left_value + right_value;
+                    break;
+                case BO_Sub: result = left_value - right_value;
                     break;
                 default: assert(false);
             }
@@ -185,7 +202,7 @@ public:
                         mStack.front().bindDecl(var_decl, val);
                     }
                 } else {
-                    // TODO: Let consumer know "This is default value"
+                    // TODO: Let consumer know "This is default value, not initialized"
                     mStack.front().bindDecl(var_decl, 0);
                 }
             }
@@ -239,15 +256,25 @@ public:
             // sub-procedure's stack frame
             mStack.push_front(StackFrame());
             for (unsigned i = 0, n = callexpr->getNumArgs(); i < n; ++i) {
+                log(FunctionCall, "Preparing Parameter[%i]\n", i);
+
                 Expr *arg = callexpr->getArg(i);
                 val = curStackFrame.getStmtVal(arg);
 
-                // prepare sub-procedure's parameters
-                mStack.front().mParameters.push_back(val);
+                Decl *decl = dyn_cast<Decl>(callee->getParamDecl(i));
+                assert(decl);
+
+                mStack.front().bindDecl(decl, val);
             }
             // TODO: bind return value with stmt
             return callee;
         }
+    }
+
+    void parmDecl(ParmVarDecl *parmVarDecl) {
+        log(FunctionCall, "Visting Param Decl Stmt\n");
+        // TODO: iterate through the param list, and set decl values
+        assert(false);
     }
 };
 

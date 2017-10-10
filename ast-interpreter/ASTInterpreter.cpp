@@ -41,8 +41,12 @@ public:
         }
     }
 
-    virtual void VisitDeclStmt(DeclStmt *declstmt) {
-        mEnv->decl(declstmt);
+    virtual void VisitDeclStmt(DeclStmt *declStmt) {
+        mEnv->decl(declStmt);
+    }
+
+    virtual void VisitParmVarDecl(ParmVarDecl *parmVarDecl) {
+        mEnv->parmDecl(parmVarDecl);
     }
 
 private:

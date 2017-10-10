@@ -9,7 +9,7 @@
 // separated debug flags
 #define ValueBinding false
 
-#define FunctionCall true
+#define FunctionCall false
 
 #define log(debug_flags, format,...) \
     do {\
