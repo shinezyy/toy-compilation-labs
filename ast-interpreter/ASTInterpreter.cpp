@@ -49,6 +49,17 @@ public:
         mEnv->parmDecl(parmVarDecl);
     }
 
+    virtual void VisitIfStmt(IfStmt *ifStmt) {
+        Expr *condition = ifStmt->getCond();
+        this->Visit(condition);
+        logs(ControlStmt, "Got the condition result.\n");
+        if (mEnv->mStack.front().getStmtVal(condition)) {
+            VisitStmt(ifStmt->getThen());
+        } else if (Stmt *elseStmt = ifStmt->getThen()){
+            VisitStmt(elseStmt);
+        }
+    }
+
 private:
     Environment *mEnv;
 };

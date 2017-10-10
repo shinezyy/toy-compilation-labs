@@ -11,6 +11,8 @@
 
 #define FunctionCall false
 
+#define ControlStmt true
+
 #define log(debug_flags, format,...) \
     do {\
         if (ZYY_DEBUG && (debug_flags)) { \
@@ -20,6 +22,14 @@
         }\
     } while(false)
 
+#define logs(debug_flags, str) \
+    do {\
+        if (ZYY_DEBUG && (debug_flags)) { \
+            fprintf(stderr, "%s,%d: " str, \
+                    __func__, __LINE__), \
+                    fflush(stderr); \
+        }\
+    } while(false)
 
 #define log_var(debug_flags, x) \
     do {\

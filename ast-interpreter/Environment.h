@@ -111,7 +111,10 @@ public:
 */
 
 class Environment {
+public:
     std::deque<StackFrame> mStack;
+
+private:
 
     FunctionDecl *mFree;                /// Declartions to the built-in functions
     FunctionDecl *mMalloc;
@@ -148,6 +151,7 @@ public:
 
     /// !TODO Support comparison operation
     void binop(BinaryOperator *bop) {
+        logs(ControlStmt, "Visiting Binary Operator\n");
         Expr *left = bop->getLHS();
         Expr *right = bop->getRHS();
 
@@ -189,7 +193,7 @@ public:
     }
 
     void decl(DeclStmt *declstmt) {
-        log(FunctionCall, "Visiting DeclStmt\n");
+        logs(FunctionCall, "Visiting DeclStmt\n");
         for (DeclStmt::decl_iterator it = declstmt->decl_begin(),
                      ie = declstmt->decl_end();
              it != ie; ++it) {
@@ -233,7 +237,7 @@ public:
         mStack.front().setPC(callexpr);
         int val = 0;
         FunctionDecl *callee = callexpr->getDirectCallee();
-        log(FunctionCall, "Visiting function call\n");
+        logs(FunctionCall, "Visiting function call\n");
         if (callee == mInput) {
             llvm::errs() << "Please Input an Integer Value : ";
             scanf("%d", &val);
@@ -272,7 +276,7 @@ public:
     }
 
     void parmDecl(ParmVarDecl *parmVarDecl) {
-        log(FunctionCall, "Visting Param Decl Stmt\n");
+        logs(FunctionCall, "Visting Param Decl Stmt\n");
         // TODO: iterate through the param list, and set decl values
         assert(false);
     }
