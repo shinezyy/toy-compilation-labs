@@ -18,6 +18,7 @@ class StackFrame {
     /// Which are either integer or addresses (also represented using an Integer value)
     std::map<Decl *, int> mVars;
     std::map<Stmt *, int> mExprs;
+
     /// The current stmt
     Stmt *mPC;
 public:
@@ -49,6 +50,8 @@ public:
     Stmt *getPC() {
         return mPC;
     }
+
+    std::vector<int> mParameters;
 };
 
 /// Heap maps address to a value
@@ -95,7 +98,7 @@ public:
 */
 
 class Environment {
-    std::vector<StackFrame> mStack;
+    std::deque<StackFrame> mStack;
 
     FunctionDecl *mFree;                /// Declartions to the built-in functions
     FunctionDecl *mMalloc;
@@ -169,6 +172,7 @@ public:
     }
 
     void decl(DeclStmt *declstmt) {
+        log(FunctionCall, "Visiting DeclStmt\n");
         for (DeclStmt::decl_iterator it = declstmt->decl_begin(),
                      ie = declstmt->decl_end();
              it != ie; ++it) {
@@ -208,21 +212,41 @@ public:
     }
 
     /// !TODO Support Function Call
-    void call(CallExpr *callexpr) {
+    FunctionDecl * call(CallExpr *callexpr) {
         mStack.front().setPC(callexpr);
         int val = 0;
         FunctionDecl *callee = callexpr->getDirectCallee();
+        log(FunctionCall, "Visiting function call\n");
         if (callee == mInput) {
             llvm::errs() << "Please Input an Integer Value : ";
             scanf("%d", &val);
 
             mStack.front().bindStmt(callexpr, val);
+            return nullptr;
+
         } else if (callee == mOutput) {
-            Expr *decl = callexpr->getArg(0);
-            val = mStack.front().getStmtVal(decl);
+            Expr *arg = callexpr->getArg(0);
+            val = mStack.front().getStmtVal(arg);
             llvm::errs() << val;
+            return nullptr;
+
         } else {
             /// You could add your code here for Function call Return
+            StackFrame &curStackFrame = mStack.front();
+
+            // TODO: Need a flag to indicate whether it has been visited
+
+            // sub-procedure's stack frame
+            mStack.push_front(StackFrame());
+            for (unsigned i = 0, n = callexpr->getNumArgs(); i < n; ++i) {
+                Expr *arg = callexpr->getArg(i);
+                val = curStackFrame.getStmtVal(arg);
+
+                // prepare sub-procedure's parameters
+                mStack.front().mParameters.push_back(val);
+            }
+            // TODO: bind return value with stmt
+            return callee;
         }
     }
 };

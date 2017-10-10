@@ -9,6 +9,8 @@
 // separated debug flags
 #define ValueBinding false
 
+#define FunctionCall true
+
 #define log(debug_flags, format,...) \
     do {\
         if (ZYY_DEBUG && (debug_flags)) { \

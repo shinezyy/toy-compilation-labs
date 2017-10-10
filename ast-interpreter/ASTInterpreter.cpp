@@ -36,7 +36,9 @@ public:
 
     virtual void VisitCallExpr(CallExpr *call) {
         VisitStmt(call);
-        mEnv->call(call);
+        if (FunctionDecl *functionDecl = mEnv->call(call)) {
+            VisitStmt(functionDecl->getBody());
+        }
     }
 
     virtual void VisitDeclStmt(DeclStmt *declstmt) {
