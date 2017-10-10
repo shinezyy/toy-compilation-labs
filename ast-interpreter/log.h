@@ -11,7 +11,7 @@
 
 #define FunctionCall false
 
-#define ControlStmt true
+#define ControlStmt false
 
 #define log(debug_flags, format,...) \
     do {\

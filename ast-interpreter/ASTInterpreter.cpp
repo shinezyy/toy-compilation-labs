@@ -38,6 +38,9 @@ public:
         VisitStmt(call);
         if (FunctionDecl *functionDecl = mEnv->call(call)) {
             VisitStmt(functionDecl->getBody());
+            int returnVal = mEnv->mStack.front().returnValue;
+            mEnv->mStack.pop_front();
+            mEnv->postCall(call, returnVal);
         }
     }
 
@@ -54,8 +57,10 @@ public:
         this->Visit(condition_expr);
         logs(ControlStmt, "Got the condition_expr result.\n");
         if (mEnv->getCondition(condition_expr)) {
+            logs(ControlStmt, "Cond is true, will visit then stmt.\n");
             this->Visit(ifStmt->getThen());
-        } else if (Stmt *elseStmt = ifStmt->getThen()){
+        } else if (Stmt *elseStmt = ifStmt->getElse()){
+            logs(ControlStmt, "Cond is false, will visit else stmt.\n");
             this->Visit(elseStmt);
         }
     }
@@ -69,6 +74,11 @@ public:
         }
     }
 
+    virtual void VisitReturnStmt(ReturnStmt *returnStmt) {
+        VisitStmt(returnStmt);
+        mEnv->setReturnVal(returnStmt);
+    }
+
 private:
     Environment *mEnv;
 };
@@ -79,9 +89,9 @@ public:
                                                               mVisitor(context, &mEnv) {
     }
 
-    virtual ~InterpreterConsumer() {}
+    ~InterpreterConsumer() override = default;
 
-    virtual void HandleTranslationUnit(clang::ASTContext &Context) {
+    void HandleTranslationUnit(clang::ASTContext &Context) override {
         TranslationUnitDecl *decl = Context.getTranslationUnitDecl();
         mEnv.init(decl);
 

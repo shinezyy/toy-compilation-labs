@@ -18,6 +18,7 @@ class StackFrame {
     /// Which are either integer or addresses (also represented using an Integer value)
     std::map<Decl *, int> mVars;
     std::map<Stmt *, int> mExprs;
+    std::map<CallExpr *, bool> returnFromCall;
 
     /// The current stmt
     Stmt *mPC;
@@ -65,6 +66,8 @@ public:
     Stmt *getPC() {
         return mPC;
     }
+
+    int returnValue;
 };
 
 /// Heap maps address to a value
@@ -255,7 +258,7 @@ public:
             /// You could add your code here for Function call Return
             StackFrame &curStackFrame = mStack.front();
 
-            // TODO: Need a flag to indicate whether it has been visited
+            // DONE: Need a flag to indicate whether it has been visited
 
             // sub-procedure's stack frame
             mStack.push_front(StackFrame());
@@ -270,7 +273,6 @@ public:
 
                 mStack.front().bindDecl(decl, val);
             }
-            // TODO: bind return value with stmt
             return callee;
         }
     }
@@ -283,6 +285,16 @@ public:
 
     bool getCondition(Expr *expr) {
         return static_cast<bool>(mStack.front().getStmtVal(expr));
+    }
+
+    void setReturnVal(ReturnStmt *returnStmt) {
+        mStack.front().returnValue =
+                mStack.front().getStmtVal(returnStmt->getRetValue());
+    }
+
+    void postCall(CallExpr *callexpr, int returnVal) {
+        // DONE: bind return value with stmt
+        mStack.front().bindStmt(callexpr, returnVal);
     }
 };
 
