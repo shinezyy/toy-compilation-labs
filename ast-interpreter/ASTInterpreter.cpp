@@ -50,13 +50,22 @@ public:
     }
 
     virtual void VisitIfStmt(IfStmt *ifStmt) {
-        Expr *condition = ifStmt->getCond();
-        this->Visit(condition);
-        logs(ControlStmt, "Got the condition result.\n");
-        if (mEnv->mStack.front().getStmtVal(condition)) {
-            VisitStmt(ifStmt->getThen());
+        Expr *condition_expr = ifStmt->getCond();
+        this->Visit(condition_expr);
+        logs(ControlStmt, "Got the condition_expr result.\n");
+        if (mEnv->getCondition(condition_expr)) {
+            this->Visit(ifStmt->getThen());
         } else if (Stmt *elseStmt = ifStmt->getThen()){
-            VisitStmt(elseStmt);
+            this->Visit(elseStmt);
+        }
+    }
+
+    virtual void VisitWhileStmt(WhileStmt *whileStmt) {
+        Expr *condition_expr = whileStmt->getCond();
+        this->Visit(condition_expr);
+        while (mEnv->getCondition(condition_expr)) {
+            this->Visit(whileStmt->getBody());
+            this->Visit(condition_expr);
         }
     }
 

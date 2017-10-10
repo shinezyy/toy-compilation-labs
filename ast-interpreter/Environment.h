@@ -280,6 +280,10 @@ public:
         // TODO: iterate through the param list, and set decl values
         assert(false);
     }
+
+    bool getCondition(Expr *expr) {
+        return static_cast<bool>(mStack.front().getStmtVal(expr));
+    }
 };
 
 
