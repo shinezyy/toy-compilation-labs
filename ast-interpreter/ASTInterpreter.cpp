@@ -38,7 +38,7 @@ public:
         VisitStmt(call);
         if (FunctionDecl *functionDecl = mEnv->call(call)) {
             VisitStmt(functionDecl->getBody());
-            int returnVal = mEnv->mStack.front().returnValue;
+            Value returnVal = mEnv->mStack.front().returnValue;
             mEnv->mStack.pop_front();
             mEnv->postCall(call, returnVal);
         }

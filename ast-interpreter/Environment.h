@@ -13,12 +13,40 @@
 
 using namespace clang;
 
+enum Typ {
+    Int = 0,
+    Address,
+    Unknown,
+};
+
+struct Value {
+    const Typ typ;
+    union {
+        int intValue;
+        int *address;
+    };
+
+    explicit Value () : typ(Unknown) {
+        address = nullptr;
+        intValue = 0;
+    }
+
+    explicit Value (int intValue_) : typ(Int) {
+        address = nullptr;
+        intValue = intValue_;
+    };
+
+    explicit Value (int *address_) : typ(Address) {
+        intValue = 0;
+        address = address_;
+    };
+};
+
 class StackFrame {
     /// StackFrame maps Variable Declaration to Value
     /// Which are either integer or addresses (also represented using an Integer value)
-    std::map<Decl *, int> mVars;
-    std::map<Stmt *, int> mExprs;
-    std::map<CallExpr *, bool> returnFromCall;
+    std::map<Decl *, Value> mVars;
+    std::map<Stmt *, Value> mExprs;
 
     /// The current stmt
     Stmt *mPC;
@@ -26,23 +54,31 @@ public:
     StackFrame() : mVars(), mExprs(), mPC() {
     }
 
-    void bindDecl(Decl *decl, int val) {
-        mVars[decl] = val;
+    void bindDecl(Decl *decl, Value &value) {
+        mVars[decl] = value;
     }
 
-    int getDeclVal(Decl *decl) {
+    void bindDecl(Decl *decl, Value &&value) {
+        mVars[decl] = value;
+    }
+
+    Value getDeclVal(Decl *decl) {
         assert (mVars.find(decl) != mVars.end());
         return mVars.find(decl)->second;
     }
 
-    void bindStmt(Stmt *stmt, int val) {
-        mExprs[stmt] = val;
+    void bindStmt(Stmt *stmt, Value &value) {
+        mExprs[stmt] = value;
     }
 
-    int getStmtVal(Stmt *stmt) {
+    void bindStmt(Stmt *stmt, Value &&value) {
+        mExprs[stmt] = value;
+    }
+
+    Value getStmtVal(Stmt *stmt) {
         if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(stmt)) {
             int val = static_cast<int>(IL->getValue().getLimitedValue());
-            return val;
+            return Value(val);
         }
 
         if (mExprs.find(stmt) == mExprs.end()) {
@@ -56,6 +92,7 @@ public:
             log(FunctionCall, "No binding value found for var %s\n", rso.str().c_str());
             assert(false);
         }
+
         return mExprs[stmt];
     }
 
@@ -67,51 +104,45 @@ public:
         return mPC;
     }
 
-    int returnValue;
+    Value returnValue;
 };
 
 /// Heap maps address to a value
-/*
-class Heap {
-   /// The allocated bufs, key is the address, val is its size
-   std::map<int, int> mBufs;
-   /// The map that maps address to value
-   std::map<int, int> mContents;
-public:
-   int Malloc(int size) {
-      assert (mBufs.find(addr) == mHeap.end());
-      /// Allocate the buf
-      int * buf = malloc(size * sizeof(int) );
-      mBufs.insert(std::make_pair(addr, size));
 
-      /// Initialize the Content
-      for (int i=0; i<size; i ++) {
-         mContents.insert(std::make_pair(buf+i, 0));
-      }
-      return buf;
-   }
-   void Free (int addr) {
-      /// Clear the contents;
-      assert (mHeap.find(addr) != mHeap.end());
-      int * buf = addr;
-      int size = mHeap.find(addr)->second;
-      for (int i = 0; i < size; i++) {
-          assert (mContents.find(buf+i) != mContents.end());
-          mContents.erase(buf+i);
-      }
-        /// Free the allocated buf
-      free(mHeap.find(addr)->second);
-   }
-   void Update(int addr, int val) {
-      assert (mContents.find(addr) != mContents.end());
-      mContents[addr] = val;
-   }
-   int get(int addr) {
-      assert (mContents.find(addr) != mContents.end());
-      return mContents.find(addr)->second;
+class Heap {
+    std::map<Stmt *, int *> stmtMap;
+
+    std::map<Decl *, int *> declMap;
+
+    std::map<int *, size_t> addressMap;
+
+public:
+    int *Malloc(int size) {
+        auto *buf = (int *) malloc(static_cast<size_t>(size));
+        return buf;
+    }
+
+    void Free (int *address) {
+
+    }
+
+    void Update(int *address, int val) {
+
+    }
+
+    int get(int *address) {
+
+    }
+
+    void bindStmt(Stmt *stmt, int *address) {
+        stmtMap.insert(std::make_pair(stmt, address));
+    }
+
+    void bindDecl(Decl *decl, int *address) {
+        declMap.insert(std::make_pair(decl, address));
     }
 };
-*/
+
 
 class Environment {
 public:
@@ -152,6 +183,32 @@ public:
         return mEntry;
     }
 
+    template <class T>
+    void binResult(BinaryOperator *binaryOperator,
+                T &left_value, T &right_value) {
+        T result;
+        switch (binaryOperator->getOpcode()) {
+            case BO_LT: result = left_value < right_value;
+                break;
+            case BO_GT: result = left_value > right_value;
+                break;
+            case BO_EQ: result = left_value == right_value;
+                break;
+            case BO_Add: result = left_value + right_value;
+                break;
+            case BO_Sub: result = left_value - right_value;
+                break;
+            default: assert(false);
+        }
+        mStack.front().bindStmt(binaryOperator, result);
+
+        if (DeclRefExpr *declexpr = dyn_cast<DeclRefExpr>(binaryOperator)) {
+            assert(false);
+            Decl *decl = declexpr->getFoundDecl();
+            mStack.front().bindDecl(decl, result);
+        }
+    }
+
     /// !TODO Support comparison operation
     void binop(BinaryOperator *bop) {
         logs(ControlStmt, "Visiting Binary Operator\n");
@@ -159,7 +216,7 @@ public:
         Expr *right = bop->getRHS();
 
         if (bop->isAssignmentOp()) {
-            int val = mStack.front().getStmtVal(right);
+            Value val = mStack.front().getStmtVal(right);
             mStack.front().bindStmt(left, val);
             if (DeclRefExpr *declexpr = dyn_cast<DeclRefExpr>(left)) {
                 Decl *decl = declexpr->getFoundDecl();
@@ -168,29 +225,16 @@ public:
             log(ValueBinding, "binding value %d with decl\n", val);
 
         } else if (bop->isComparisonOp() || bop->isAdditiveOp()) {
-            int left_value = mStack.front().getStmtVal(left);
-            int right_value = mStack.front().getStmtVal(right);
-            int result;
-            log_var_s(ValueBinding, left_value);
-            log_var_s(ValueBinding, right_value);
-            switch (bop->getOpcode()) {
-                case BO_LT: result = left_value < right_value;
-                    break;
-                case BO_GT: result = left_value > right_value;
-                    break;
-                case BO_EQ: result = left_value == right_value;
-                    break;
-                case BO_Add: result = left_value + right_value;
-                    break;
-                case BO_Sub: result = left_value - right_value;
-                    break;
-                default: assert(false);
-            }
-            mStack.front().bindStmt(bop, result);
-            if (DeclRefExpr *declexpr = dyn_cast<DeclRefExpr>(bop)) {
-                assert(false);
-                Decl *decl = declexpr->getFoundDecl();
-                mStack.front().bindDecl(decl, result);
+            Value left_value = mStack.front().getStmtVal(left);
+            Value right_value = mStack.front().getStmtVal(right);
+            assert(left_value.typ == right_value.typ);
+
+//            log_var_s(ValueBinding, left_value);
+//            log_var_s(ValueBinding, right_value);
+            if (left_value.typ == Int) {
+                binResult(bop, left_value.intValue, right_value.intValue);
+            } else {
+                binResult(bop, left_value.address, right_value.address);
             }
         }
     }
@@ -206,11 +250,11 @@ public:
                     if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(expr)) {
                         // TODO: support negative number
                         int val = static_cast<int>(IL->getValue().getLimitedValue());
-                        mStack.front().bindDecl(var_decl, val);
+                        mStack.front().bindDecl(var_decl, Value(val));
                     }
                 } else {
                     // TODO: Let consumer know "This is default value, not initialized"
-                    mStack.front().bindDecl(var_decl, 0);
+                    mStack.front().bindDecl(var_decl, Value(0));
                 }
             }
         }
@@ -220,7 +264,7 @@ public:
         mStack.front().setPC(declref);
         if (declref->getType()->isIntegerType()) {
             if (Decl *decl = declref->getFoundDecl()) {
-                int val = mStack.front().getDeclVal(decl);
+                Value val = mStack.front().getDeclVal(decl);
                 mStack.front().bindStmt(declref, val);
             }
         }
@@ -230,7 +274,7 @@ public:
         mStack.front().setPC(castexpr);
         if (castexpr->getType()->isIntegerType()) {
             Expr *expr = castexpr->getSubExpr();
-            int val = mStack.front().getStmtVal(expr);
+            Value val = mStack.front().getStmtVal(expr);
             mStack.front().bindStmt(castexpr, val);
         }
     }
@@ -238,20 +282,21 @@ public:
     /// !TODO Support Function Call
     FunctionDecl * call(CallExpr *callexpr) {
         mStack.front().setPC(callexpr);
-        int val = 0;
+        Value val;
         FunctionDecl *callee = callexpr->getDirectCallee();
         logs(FunctionCall, "Visiting function call\n");
         if (callee == mInput) {
             llvm::errs() << "Please Input an Integer Value : ";
             scanf("%d", &val);
 
-            mStack.front().bindStmt(callexpr, val);
+            mStack.front().bindStmt(callexpr, Value(val));
             return nullptr;
 
         } else if (callee == mOutput) {
             Expr *arg = callexpr->getArg(0);
             val = mStack.front().getStmtVal(arg);
-            llvm::errs() << val;
+            assert(val.typ == Int);
+            llvm::errs() << val.intValue;
             return nullptr;
 
         } else {
@@ -284,7 +329,9 @@ public:
     }
 
     bool getCondition(Expr *expr) {
-        return static_cast<bool>(mStack.front().getStmtVal(expr));
+        Value value = mStack.front().getStmtVal(expr);
+        assert(value.typ == Int);
+        return static_cast<bool>(value.intValue);
     }
 
     void setReturnVal(ReturnStmt *returnStmt) {
@@ -292,7 +339,7 @@ public:
                 mStack.front().getStmtVal(returnStmt->getRetValue());
     }
 
-    void postCall(CallExpr *callexpr, int returnVal) {
+    void postCall(CallExpr *callexpr, Value returnVal) {
         // DONE: bind return value with stmt
         mStack.front().bindStmt(callexpr, returnVal);
     }
