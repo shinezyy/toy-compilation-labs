@@ -13,6 +13,8 @@
 
 #define ControlStmt false
 
+#define PointerVisit true
+
 #define log(debug_flags, format,...) \
     do {\
         if (ZYY_DEBUG && (debug_flags)) { \

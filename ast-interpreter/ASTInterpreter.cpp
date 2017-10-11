@@ -21,17 +21,27 @@ public:
 
     virtual void VisitBinaryOperator(BinaryOperator *bop) {
         VisitStmt(bop);
-        mEnv->binop(bop);
+        mEnv->binOp(bop);
+    }
+
+    virtual void VisitUnaryOperator(UnaryOperator *uop) {
+        VisitStmt(uop);
+        mEnv->unaryOp(uop);
     }
 
     virtual void VisitDeclRefExpr(DeclRefExpr *expr) {
         VisitStmt(expr);
-        mEnv->declref(expr);
+        mEnv->declRef(expr);
     }
 
     virtual void VisitCastExpr(CastExpr *expr) {
         VisitStmt(expr);
         mEnv->cast(expr);
+    }
+
+    virtual void VisitImplicitCastExpr(ImplicitCastExpr *expr) {
+        VisitStmt(expr);
+        mEnv->implicitCast(expr);
     }
 
     virtual void VisitCallExpr(CallExpr *call) {
