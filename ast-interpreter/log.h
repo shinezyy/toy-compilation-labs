@@ -13,7 +13,7 @@
 
 #define ControlStmt false
 
-#define PointerVisit true
+#define PointerVisit false
 
 #define log(debug_flags, format,...) \
     do {\

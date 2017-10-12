@@ -151,7 +151,15 @@ set(SOURCE_FILES
         include/clang/Tooling/RefactoringCallbacks.h
         include/clang/Tooling/ReplacementsYaml.h
         include/clang/Tooling/Tooling.h
-        ast-interpreter/log.h)
+        ast-interpreter/log.h
+        ast-interpreter/value.h
+        ast-interpreter/stack.h
+        ast-interpreter/heap.h
+        ast-interpreter/env_utils.cpp
+        ast-interpreter/declare.cpp
+        ast-interpreter/binary_operator.cpp
+        ast-interpreter/call_ret.cpp
+        ast-interpreter/cast.cpp ast-interpreter/value.cpp)
 
 include_directories(ast-interpreter)
 include_directories(include)
