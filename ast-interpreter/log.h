@@ -15,6 +15,10 @@
 
 #define PointerVisit false
 
+#define DeclVisit false
+
+#define CastVisit true
+
 #define log(debug_flags, format,...) \
     do {\
         if (ZYY_DEBUG && (debug_flags)) { \

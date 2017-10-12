@@ -8,7 +8,6 @@ void Environment::declRef(DeclRefExpr *declRefexpr) {
     mStack.front().setPC(declRefexpr);
     QualType qualType = declRefexpr->getType();
     Decl *decl = declRefexpr->getFoundDecl();
-    logp(PointerVisit, decl);
 
     if (qualType->isPointerType()) {
         assert(decl);
@@ -20,6 +19,7 @@ void Environment::declRef(DeclRefExpr *declRefexpr) {
     } else if (declRefexpr->getType()->isIntegerType()) {
         if (decl) {
             Value val = mStack.front().getDeclVal(decl);
+            log_var(DeclVisit, val.intValue);
             mStack.front().bindStmt(declRefexpr, val);
         }
     }
@@ -39,8 +39,9 @@ void Environment::decl(DeclStmt *declstmt) {
                 if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(initExpr)) {
                     // TODO: support negative number
                     int val = static_cast<int>(IL->getValue().getLimitedValue());
+                    log_var(DeclVisit, val);
                     mStack.front().bindDecl(var_decl, Value(val));
-
+                    continue;
                 }
             }
             //</editor-fold>
@@ -68,7 +69,7 @@ void Environment::decl(DeclStmt *declstmt) {
 
                     logp(PointerVisit, initVal.address);
                     mStack.front().bindDecl(var_decl, initVal);
-                    logp(PointerVisit, decl);
+
                 } else {
                     default_value.typ = Address;
                     default_value.pointerLevel = pLevel;

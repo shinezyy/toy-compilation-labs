@@ -23,7 +23,14 @@ void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
 
     } else if (castKind == CK_FunctionToPointerDecay){
         return;
+
+    } else if (castKind == CK_IntegralCast){
+        Value value = mStack.front().getStmtVal(subExpr);
+        mStack.front().bindStmt(implicitCastExpr, value);
+
     } else {
+        log(CastVisit, "Implicit kind: %s\n",
+            implicitCastExpr->getCastKindName());
         assert(false);
     }
 }
