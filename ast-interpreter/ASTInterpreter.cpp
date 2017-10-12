@@ -90,6 +90,11 @@ public:
         mEnv->setReturnVal(returnStmt);
     }
 
+    virtual void VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *expr) {
+        VisitStmt(expr);
+        mEnv->unaryExprOrTypeTraitExpr(expr);
+    }
+
 private:
     Environment *mEnv;
 };

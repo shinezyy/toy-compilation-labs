@@ -17,7 +17,7 @@
 
 #define DeclVisit false
 
-#define CastVisit true
+extern bool CastVisit;
 
 #define log(debug_flags, format,...) \
     do {\

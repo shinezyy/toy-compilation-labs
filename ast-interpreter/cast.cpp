@@ -4,10 +4,15 @@
 
 #include "Environment.h"
 
+bool CastVisit = true;
+
 void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
 
     CastKind castKind = implicitCastExpr->getCastKind();
     Expr *subExpr = implicitCastExpr->getSubExpr();
+
+    const char *castKindStr = implicitCastExpr->getCastKindName();
+    log(CastVisit, "Implicit kind: %s\n", castKindStr);
 
     if (castKind == CK_LValueToRValue) {
         Value value = mStack.front().getStmtVal(subExpr);
@@ -29,8 +34,6 @@ void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
         mStack.front().bindStmt(implicitCastExpr, value);
 
     } else {
-        log(CastVisit, "Implicit kind: %s\n",
-            implicitCastExpr->getCastKindName());
         assert(false);
     }
 }

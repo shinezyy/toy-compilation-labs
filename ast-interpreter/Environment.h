@@ -122,6 +122,14 @@ public:
 
     unsigned long getPointeeSize(int pointerLevel);
 
+    void unaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *expr) {
+        if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(expr)) {
+            int val = static_cast<int>(IL->getValue().getLimitedValue());
+            mStack.front().bindStmt(expr, Value(val));
+            return;
+        }
+        assert(false);
+    }
 };
 
 
