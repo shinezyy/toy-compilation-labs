@@ -44,16 +44,17 @@ struct Value {
         address = address_;
     };
 
-    explicit Value (Value val) : typ(val.typ) {
-        pointerLevel = val.pointerLevel;
-        pointeeSize = val.pointeeSize;
-    };
+//    explicit Value (Value& val) : typ(val.typ) {
+//        pointerLevel = val.pointerLevel;
+//        pointeeSize = val.pointeeSize;
+//    };
 
-    Value &operator=(Value val) {
+    Value operator=(Value val) {
         typ = val.typ;
         pointerLevel = val.pointerLevel;
         pointeeSize = val.pointeeSize;
         address = val.address;
+        return *this;
     }
 };
 
@@ -68,22 +69,23 @@ void makeLeftAddress(Value* &l, Value* &r) {
     }
 }
 
-template<class T>
-Value compute(Value &l, Value &r, std::function< T&(T&, T&) > lambda) {
+Value compute(Value &l, Value &r, std::function< int(int, int) > bop_int,
+              std::function< unsigned long(unsigned long, unsigned long) > bop_long) {
+
     assert((l.typ != LeftValue) && (r.typ != LeftValue));
     assert(!(l.typ == Address && r.typ == Address));
 
     if (l.typ == Int && r.typ == Int) {
-        Value val(r);
-        val.intValue = lambda(l.intValue, r.intValue);
+        Value val = r;
+        val.intValue = bop_int(l.intValue, r.intValue);
         return val;
     } else {
         Value *lp = &l, *rp = &r;
         makeLeftAddress(lp, rp);
         Value val(*lp);
         unsigned long result =
-                lambda((unsigned long) l.address,
-                       ((unsigned long) r.intValue) * l.pointeeSize);
+                bop_long((unsigned long) lp->address,
+                       ((unsigned long) rp->intValue) * lp->pointeeSize);
         val.address = (void *) result;
         return val;
     }
@@ -163,6 +165,7 @@ class Heap {
 public:
     void *Malloc(int size) {
         auto *buf = (void *) malloc(static_cast<size_t>(size));
+        addressMap.insert(std::make_pair(buf, size));
         return buf;
     }
 
@@ -183,8 +186,10 @@ public:
 
     bool noWild(void *address) {
         auto lower = addressMap.lower_bound(address);
+        log(PointerVisit, "Address: %p\n", address);
         assert(lower != addressMap.end());
-        assert(lower->first + lower->second > address);
+        assert((unsigned long) lower->first + lower->second >
+                       (unsigned long) address);
         return true;
     }
 
@@ -241,28 +246,34 @@ public:
         return mEntry;
     }
 
-    template <class T>
+#define lambda_helper(op) \
+        [](int a, int b) {return a op b;}, \
+        [](unsigned long a, unsigned long b) {return a op b;}
+
     void DispatchComputation(BinaryOperator *binaryOperator, Value &x, Value &y) {
         Value result;
+
         switch (binaryOperator->getOpcode()) {
-            case BO_Add: result = compute(x, y, [](T& a, T& b) {return a+b;});
+            case BO_Add: result = compute(x, y, lambda_helper(+));
                 break;
-            case BO_Sub: result = compute(x, y, [](T& a, T& b) {return a-b;});
+            case BO_Sub: result = compute(x, y, lambda_helper(-));
                 break;
-            case BO_Mul: result = compute(x, y, [](T& a, T& b) {return a*b;});
+            case BO_Mul: result = compute(x, y, lambda_helper(*));
                 break;
-            case BO_Div: result = compute(x, y, [](T& a, T& b) {return a/b;});
+            case BO_Div: result = compute(x, y, lambda_helper(/));
                 break;
-            case BO_EQ: result = compute(x, y, [](T& a, T& b) {return a==b;});
+            case BO_EQ: result = compute(x, y, lambda_helper(==));
                 break;
-            case BO_GT: result = compute(x, y, [](T& a, T& b) {return a>b;});
+            case BO_GT: result = compute(x, y, lambda_helper(>));
                 break;
-            case BO_LT: result = compute(x, y, [](T& a, T& b) {return a<b;});
+            case BO_LT: result = compute(x, y, lambda_helper(<));
                 break;
             default: assert(false);
         }
         mStack.front().bindStmt(binaryOperator, Value(result));
     }
+
+#undef lambda_helper
 
     /// !TODO Support comparison operation
     void binOp(BinaryOperator *bop) {
@@ -281,7 +292,9 @@ public:
                 mStack.front().bindDecl(decl, rightValue);
 
             } else if (UnaryOperator *unaryOperator = dyn_cast<UnaryOperator>(left)){
-                updateMem(mStack.front().getStmtVal(left), rightValue);
+                if (unaryOperator->getOpcode() == UO_Deref) {
+                    updateMem(mStack.front().getStmtVal(left), rightValue);
+                }
             }
 
             mStack.front().bindStmt(bop, rightValue);
@@ -296,6 +309,7 @@ public:
 //            log_var_s(ValueBinding, right_value);
             DispatchComputation(bop, left_value, right_value);
         }
+        logs(PointerVisit, "Visited Binary Operator\n");
     }
 
     Value deRef(Value &value) {
@@ -311,6 +325,8 @@ public:
 
         if (unaryOperator->getOpcode() == UO_Deref) {
             Value value = mStack.front().getStmtVal(subExpr);
+            logp(PointerVisit, value.address);
+            log_var(PointerVisit, value.pointerLevel);
             mStack.front().bindStmt(unaryOperator, deRef(value));
         }
         logs(PointerVisit, "Visited Unary Operator\n");
@@ -323,31 +339,50 @@ public:
              it != ie; ++it) {
             Decl *decl = *it;
             if (VarDecl *var_decl = dyn_cast<VarDecl>(decl)) {
-                if (Expr *expr = var_decl->getInit()) {
-                    if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(expr)) {
+                Expr *initExpr = var_decl->getInit();
+
+                //<editor-fold desc="Integer init">
+                if (initExpr) {
+                    if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(initExpr)) {
                         // TODO: support negative number
                         int val = static_cast<int>(IL->getValue().getLimitedValue());
                         mStack.front().bindDecl(var_decl, Value(val));
-                        break;
+
                     }
                 }
+                //</editor-fold>
+
                 // TODO: Let consumer know "This is default value, not initialized"
-                // getInit is null
+
                 int pLevel = getPointerLevel(var_decl->getType());
                 unsigned long pSize = getPointeeSize(pLevel);
 
-                Value value;
+                Value default_value;
                 if (pLevel == 0) {
-                    logs(PointerVisit, "Not pointer");
-                    value.typ = Int;
-                    value.pointerLevel = 0;
+                    logs(PointerVisit, "Not pointer\n");
+                    default_value.typ = Int;
+                    default_value.pointerLevel = 0;
+                    mStack.front().bindDecl(var_decl, default_value);
                 } else {
                     log(PointerVisit, "Lv %i pointer\n", pLevel);
-                    value.typ = Address;
-                    value.pointerLevel = pLevel;
-                    value.pointeeSize = pSize;
+
+                    if (initExpr) {
+                        Value initVal = mStack.front().getStmtVal(initExpr);
+
+                        // pointer info can only be obtained from here
+                        initVal.pointerLevel = pLevel;
+                        initVal.pointeeSize = pSize;
+
+                        logp(PointerVisit, initVal.address);
+                        mStack.front().bindDecl(var_decl, initVal);
+                        logp(PointerVisit, decl);
+                    } else {
+                        default_value.typ = Address;
+                        default_value.pointerLevel = pLevel;
+                        default_value.pointeeSize = pSize;
+                        mStack.front().bindDecl(var_decl, default_value);
+                    }
                 }
-                mStack.front().bindDecl(var_decl, value);
             }
         }
     }
@@ -356,10 +391,13 @@ public:
         mStack.front().setPC(declRefexpr);
         QualType qualType = declRefexpr->getType();
         Decl *decl = declRefexpr->getFoundDecl();
+        logp(PointerVisit, decl);
 
         if (qualType->isPointerType()) {
             assert(decl);
             Value val = mStack.front().getDeclVal(decl);
+            logp(PointerVisit, val.address);
+            log_var(PointerVisit, val.pointerLevel);
             mStack.front().bindStmt(declRefexpr, val);
 
         } else if (declRefexpr->getType()->isIntegerType()) {
@@ -410,8 +448,9 @@ public:
             assert(val.typ == Int);
             // val.intValue is allocation size
             void *allocatedAddress = heap.Malloc(val.intValue);
-            mStack.front().bindStmt(callExpr, Value(allocatedAddress));
+            logp(PointerVisit, allocatedAddress);
 
+            mStack.front().bindStmt(callExpr, Value(allocatedAddress));
             return nullptr;
 
         } else if (callee == mFree){
@@ -469,11 +508,26 @@ public:
     }
 
     void implicitCast(ImplicitCastExpr *implicitCastExpr) {
-        Value value = mStack.front().getStmtVal(implicitCastExpr->getSubExpr());
-        if (implicitCastExpr->isRValue() && value.typ == LeftValue) {
-            mStack.front().bindStmt(implicitCastExpr, left2Right(value));
+
+        CastKind castKind = implicitCastExpr->getCastKind();
+        Expr *subExpr = implicitCastExpr->getSubExpr();
+
+        if (castKind == CK_LValueToRValue) {
+            Value value = mStack.front().getStmtVal(subExpr);
+
+            logp(PointerVisit, value.address);
+            log_var(PointerVisit, value.pointerLevel);
+
+            if (implicitCastExpr->isRValue() && value.typ == LeftValue) {
+                mStack.front().bindStmt(implicitCastExpr, left2Right(value));
+            } else {
+                mStack.front().bindStmt(implicitCastExpr, value);
+            }
+
+        } else if (castKind == CK_FunctionToPointerDecay){
+            return;
         } else {
-            mStack.front().bindStmt(implicitCastExpr, value);
+            assert(false);
         }
     }
 
@@ -500,6 +554,8 @@ public:
         assert(leftValue.pointerLevel >= 1);
 
         if (leftValue.pointerLevel == 1) {
+            logp(PointerVisit, leftValue.address);
+            log_var(PointerVisit, leftValue.pointerLevel);
             heap.Update((int *) leftValue.address, rightValue.intValue);
         } else {
             heap.Update((void **) leftValue.address, rightValue.address);

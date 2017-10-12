@@ -55,6 +55,7 @@ public:
     }
 
     virtual void VisitDeclStmt(DeclStmt *declStmt) {
+        VisitStmt(declStmt);
         mEnv->decl(declStmt);
     }
 

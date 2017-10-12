@@ -42,6 +42,16 @@
         }\
     } while(false)
 
+#define logp(debug_flags, p) \
+    do {\
+        if (ZYY_DEBUG && (debug_flags)) { \
+            fprintf(stderr, "%s,%d: " "%s is %p\n", \
+                    __func__, __LINE__, #p, p), \
+                    fflush(stderr); \
+        }\
+    } while(false)
+
+
 // short:
 #define log_var_s(debug_flags, x) \
     do {\
