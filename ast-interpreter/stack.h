@@ -25,11 +25,11 @@ public:
     StackFrame() : mVars(), mExprs(), mPC() {
     }
 
-    void bindDecl(clang::Decl *decl, Value &value) {
-        mVars[decl] = value;
-    }
+//    void bindDecl(clang::Decl *decl, Value &value) {
+//        mVars[decl] = value;
+//    }
 
-    void bindDecl(clang::Decl *decl, Value &&value) {
+    void bindDecl(clang::Decl *decl, Value value) {
         mVars[decl] = value;
     }
 
@@ -38,11 +38,11 @@ public:
         return mVars.find(decl)->second;
     }
 
-    void bindStmt(clang::Stmt *stmt, Value &value) {
-        mExprs[stmt] = value;
-    }
+//    void bindStmt(clang::Stmt *stmt, Value &value) {
+//        mExprs[stmt] = value;
+//    }
 
-    void bindStmt(clang::Stmt *stmt, Value &&value) {
+    void bindStmt(clang::Stmt *stmt, Value value) {
         mExprs[stmt] = value;
     }
 

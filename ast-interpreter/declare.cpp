@@ -63,6 +63,7 @@ void Environment::decl(DeclStmt *declstmt) {
                 log(PointerVisit, "Lv %i pointer\n", pLevel);
 
                 if (initExpr) {
+                    logp(PointerVisit, (void *) initExpr);
                     Value initVal = mStack.front().getStmtVal(initExpr);
 
                     // pointer info can only be obtained from here

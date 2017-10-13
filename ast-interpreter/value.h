@@ -37,7 +37,7 @@ struct Value {
     explicit Value (void *address_) :
             typ(Address),
             pointeeSize(0),
-            address(address)
+            address(address_)
     {
     }
 
@@ -46,7 +46,7 @@ struct Value {
 //        pointeeSize = val.pointeeSize;
 //    };
 
-    Value operator=(Value val);
+    Value& operator=(Value val);
 };
 
 void makeLeftAddress(Value* &l, Value* &r);

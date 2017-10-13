@@ -23,9 +23,10 @@ unsigned long Environment::getPointeeSize(int pointerLevel) {
 }
 
 void Environment::updateMem(Value leftValue, Value rightValue, size_t size) {
-    if (size == 32) {
+    if (size == 4) {
         heap.Update((int *) leftValue.address, rightValue.intValue);
     } else {
+        assert(size == 8);
         heap.Update((void **) leftValue.address, rightValue.address);
     }
 }
@@ -53,3 +54,23 @@ const char *Environment::getDeclstr(Decl *decl) {
     }
     return nullptr;
 }
+
+bool Environment::isDerefExpr(Expr *expr) {
+    auto uop = dyn_cast<UnaryOperator>(expr);
+    if (!uop) {
+        return false;
+    }
+    return uop->getOpcode() == UO_Deref;
+}
+
+size_t Environment::getDeRefPointeeSize(UnaryOperator *unaryOperator) {
+    assert(isDerefExpr(unaryOperator));
+
+    Expr *sub_expr = unaryOperator->getSubExpr();
+    QualType sub_expr_type = getExprType(sub_expr);
+
+    size_t size = getPointeeSize(getPointerLevel(sub_expr_type));
+    return size;
+
+}
+

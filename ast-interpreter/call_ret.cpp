@@ -35,6 +35,7 @@ FunctionDecl *Environment::call(CallExpr *callExpr) {
         logp(PointerVisit, allocatedAddress);
 
         mStack.front().bindStmt(callExpr, Value(allocatedAddress));
+        logp(PointerVisit, (void *) callExpr);
         return nullptr;
 
     } else if (callee == mFree){

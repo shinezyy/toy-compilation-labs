@@ -17,7 +17,8 @@ Value compute(Value &l, Value &r, std::function<int(int, int)> bop_int,
     } else {
         Value *lp = &l, *rp = &r;
         makeLeftAddress(lp, rp);
-        Value val(*lp);
+        assert(lp->pointeeSize);
+        Value val = *lp;
         unsigned long result =
                 bop_long((unsigned long) lp->address,
                          ((unsigned long) rp->intValue) * lp->pointeeSize);
@@ -78,11 +79,11 @@ void Environment::binOp(BinaryOperator *bop) {
                     getDeclstr(decl), rightValue.address);
             }
 
-        } else if (UnaryOperator *unaryOperator = dyn_cast<UnaryOperator>(left)){
+        } else if (auto unaryOperator = dyn_cast<UnaryOperator>(left)){
             if (unaryOperator->getOpcode() == UO_Deref) {
-                assert(getExprType(left)->getPointeeType() == getExprType(right));
-                size_t size = getTypeInfo(unaryOperator).Width;
-                updateMem(mStack.front().getStmtVal(left), rightValue, size);
+                size_t pointee_size = getDeRefPointeeSize(unaryOperator);
+                log(PointerVisit, "Updating size: %lu\n", pointee_size);
+                updateMem(mStack.front().getStmtVal(left), rightValue, pointee_size);
             }
         }
 
@@ -108,5 +109,4 @@ void Environment::binOp(BinaryOperator *bop) {
     }
     logs(PointerVisit, "Visited Binary Operator\n");
 }
-
 

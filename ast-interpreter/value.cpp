@@ -15,8 +15,9 @@ void makeLeftAddress(Value *&l, Value *&r) {
     }
 }
 
-Value Value::operator=(Value val) {
+Value& Value::operator=(Value val) {
     typ = val.typ;
     address = val.address;
+    pointeeSize = val.pointeeSize;
     return *this;
 }

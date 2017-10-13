@@ -136,6 +136,10 @@ public:
     TypeInfo getTypeInfo(Expr *expr);
 
     const char* getDeclstr(Decl *decl);
+
+    size_t getDeRefPointeeSize(UnaryOperator *unaryOperator);
+
+    bool isDerefExpr(Expr *expr);
 };
 
 
