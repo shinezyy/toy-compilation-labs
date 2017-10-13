@@ -7,8 +7,8 @@
 Value compute(Value &l, Value &r, std::function<int(int, int)> bop_int,
               std::function<unsigned long(unsigned long, unsigned long)> bop_long) {
 
-    assert((l.typ != LeftValue) && (r.typ != LeftValue));
-    assert(!(l.typ == Address && r.typ == Address));
+//    assert((l.typ != LeftValue) && (r.typ != LeftValue));
+//    assert(!(l.typ == Address && r.typ == Address));
 
     if (l.typ == Int && r.typ == Int) {
         Value val = r;
@@ -64,22 +64,25 @@ void Environment::binOp(BinaryOperator *bop) {
 
         // TODO: consider lvalue on the right
         Value rightValue = mStack.front().getStmtVal(right);
-        assert(rightValue.typ != LeftValue);
 
         if (DeclRefExpr *declExpr = dyn_cast<DeclRefExpr>(left)) {
             Decl *decl = declExpr->getFoundDecl();
-            if (!left->getType()->isPointerType()) {
+            if (!getDeclType(decl)->isPointerType()) {
                 mStack.front().bindDecl(decl, rightValue);
+                log(ValueBinding, "Binding %s with int: %d\n",
+                    getDeclstr(decl), rightValue.intValue);
+
             } else {
-                Value leftValue = mStack.front().getStmtVal(left);
-                Value newValue(leftValue);
-                newValue.address = rightValue.address;
-                mStack.front().bindDecl(decl, newValue);
+                mStack.front().bindDecl(decl, Value(rightValue.address));
+                log(ValueBinding, "Binding %s with address: %p\n",
+                    getDeclstr(decl), rightValue.address);
             }
 
         } else if (UnaryOperator *unaryOperator = dyn_cast<UnaryOperator>(left)){
             if (unaryOperator->getOpcode() == UO_Deref) {
-                updateMem(mStack.front().getStmtVal(left), rightValue);
+                assert(getExprType(left)->getPointeeType() == getExprType(right));
+                size_t size = getTypeInfo(unaryOperator).Width;
+                updateMem(mStack.front().getStmtVal(left), rightValue, size);
             }
         }
 
@@ -89,10 +92,18 @@ void Environment::binOp(BinaryOperator *bop) {
                || bop->isMultiplicativeOp()) {
         Value left_value = mStack.front().getStmtVal(left);
         Value right_value = mStack.front().getStmtVal(right);
-        assert(left_value.typ == right_value.typ);
+//        assert(left_value.typ == right_value.typ);
+//        assert(getExprType(left) == getExprType(right));
 
-//            log_var_s(ValueBinding, left_value);
-//            log_var_s(ValueBinding, right_value);
+        // Make sure pointee size is only used here
+        if (getPointerLevel(getExprType(left)) > 1) {
+            left_value.pointeeSize = 8;
+            right_value.pointeeSize = 8;
+        } else {
+            left_value.pointeeSize = 4;
+            right_value.pointeeSize = 4;
+        }
+
         DispatchComputation(bop, left_value, right_value);
     }
     logs(PointerVisit, "Visited Binary Operator\n");

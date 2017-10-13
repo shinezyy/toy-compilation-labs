@@ -9,13 +9,11 @@
 enum Typ {
     Int = 0,
     Address,
-    LeftValue,
     Unknown,
 };
 
 struct Value {
     Typ typ;
-    int pointerLevel;
     unsigned long pointeeSize;
 
     union {
@@ -23,19 +21,25 @@ struct Value {
         void *address;
     };
 
-    explicit Value () : typ(Unknown) {
-        pointerLevel = -1;
+    explicit Value () :
+            typ(Unknown),
+            pointeeSize(0)
+    {
     }
 
-    explicit Value (int intValue_) : typ(Int) {
-        pointerLevel = -1;
-        intValue = intValue_;
-    };
+    explicit Value (int intValue_) :
+            typ(Int),
+            pointeeSize(0),
+            intValue(intValue_)
+    {
+    }
 
-    explicit Value (void *address_) : typ(Address) {
-        pointerLevel = -1;
-        address = address_;
-    };
+    explicit Value (void *address_) :
+            typ(Address),
+            pointeeSize(0),
+            address(address)
+    {
+    }
 
 //    explicit Value (Value& val) : typ(val.typ) {
 //        pointerLevel = val.pointerLevel;

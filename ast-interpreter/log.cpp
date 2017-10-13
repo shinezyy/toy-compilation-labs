@@ -6,17 +6,17 @@
 bool ZYY_DEBUG = true;
 
 // separated debug flags
-bool ValueBinding = false;
+bool ValueBinding = true;
 
 bool FunctionCall = false;
 
 bool ControlStmt = false;
 
-bool PointerVisit = false;
+bool PointerVisit = true;
 
 bool DeclVisit = false;
 
-bool CastVisit = false;
+bool CastVisit = true;
 
-bool HeapState = false;
+bool HeapState = true;
 

@@ -4,13 +4,6 @@
 
 #include "Environment.h"
 
-Value Environment::deRef(Value &value) {
-    assert(value.pointerLevel > 0);
-    Value ret = value;
-    ret.typ = LeftValue;
-    return ret;
-}
-
 int Environment::getPointerLevel(clang::QualType qualType) {
     if (!qualType->isPointerType()) {
         return 0;
@@ -29,35 +22,34 @@ unsigned long Environment::getPointeeSize(int pointerLevel) {
     }
 }
 
-Value Environment::left2Right(Value &leftValue) {
-    assert(leftValue.typ == LeftValue);
-    assert(leftValue.pointerLevel >= 1);
-
-    Value ret;
-    if (leftValue.pointerLevel == 1) {
-        ret.typ = Int;
-        ret.pointerLevel = 0;
-        ret.intValue = heap.get((int *) leftValue.address);
-    } else {
-        ret.typ = Address;
-        ret.pointerLevel = leftValue.pointerLevel - 1;
-        ret.address = heap.get((void **)leftValue.address);
-    }
-    return ret;
-}
-
-
-void Environment::updateMem(Value leftValue, Value rightValue) {
-    assert(leftValue.typ == LeftValue);
-    assert(rightValue.typ != LeftValue);
-    assert(leftValue.pointerLevel >= 1);
-
-    if (leftValue.pointerLevel == 1) {
-        logp(PointerVisit, leftValue.address);
-        log_var(PointerVisit, leftValue.pointerLevel);
+void Environment::updateMem(Value leftValue, Value rightValue, size_t size) {
+    if (size == 32) {
         heap.Update((int *) leftValue.address, rightValue.intValue);
     } else {
         heap.Update((void **) leftValue.address, rightValue.address);
     }
 }
 
+QualType Environment::getDeclType(Decl *decl) {
+    if (VarDecl *var_decl = dyn_cast<VarDecl>(decl)) {
+        return var_decl->getType();
+    }
+    assert(false);
+}
+
+QualType Environment::getExprType(Expr *expr) {
+    return expr->getType();
+}
+
+TypeInfo Environment::getTypeInfo(Expr *expr) {
+    QualType qualType = expr->getType();
+    TypeInfo typeInfo = context.getTypeInfo(qualType);
+    return typeInfo;
+}
+
+const char *Environment::getDeclstr(Decl *decl) {
+    if (VarDecl *var_decl = dyn_cast<VarDecl>(decl)) {
+        return var_decl->getIdentifier()->getName().str().c_str();
+    }
+    return nullptr;
+}

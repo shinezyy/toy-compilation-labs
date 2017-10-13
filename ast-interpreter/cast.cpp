@@ -14,15 +14,8 @@ void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
 
     if (castKind == CK_LValueToRValue) {
         Value value = mStack.front().getStmtVal(subExpr);
-
         logp(PointerVisit, value.address);
-        log_var(PointerVisit, value.pointerLevel);
-
-        if (implicitCastExpr->isRValue() && value.typ == LeftValue) {
-            mStack.front().bindStmt(implicitCastExpr, left2Right(value));
-        } else {
-            mStack.front().bindStmt(implicitCastExpr, value);
-        }
+        mStack.front().bindStmt(implicitCastExpr, value);
 
     } else if (castKind == CK_FunctionToPointerDecay){
         return;

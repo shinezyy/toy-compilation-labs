@@ -10,6 +10,7 @@ class Heap {
 
 public:
     void *Malloc(int size) {
+        log(HeapState, "Allocating size: %d\n", size);
         auto *buf = (void *) malloc(static_cast<size_t>(size));
         addressMap.insert(std::make_pair(buf, size));
         return buf;

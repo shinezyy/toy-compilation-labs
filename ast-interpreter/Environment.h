@@ -72,8 +72,6 @@ public:
     /// !TODO Support comparison operation
     void binOp(BinaryOperator *bop);
 
-    Value deRef(Value &value);
-
     void unaryOp(UnaryOperator *unaryOperator);
 
     void decl(DeclStmt *declstmt);
@@ -109,9 +107,7 @@ public:
 
     void implicitCast(ImplicitCastExpr *implicitCastExpr);
 
-    Value left2Right(Value &leftValue);
-
-    void updateMem(Value leftValue, Value rightValue);
+    void updateMem(Value leftValue, Value rightValue, size_t size);
 
     int getPointerLevel (QualType qualType);
 
@@ -121,7 +117,7 @@ public:
 
         if (expr->isArgumentType()) {
             // using sizeof(Type)
-            QualType argType = expr->getType();
+            QualType argType = expr->getTypeOfArgument();
             TypeInfo typeInfo = context.getTypeInfo(argType);
             log_var(PointerVisit, (int) typeInfo.Width);
             mStack.front().bindStmt(expr, Value((int) typeInfo.Width/8));
@@ -132,6 +128,14 @@ public:
     }
 
     void CStyleCast (CStyleCastExpr* castExpr);
+
+    QualType getDeclType(Decl *decl);
+
+    QualType getExprType(Expr *expr);
+
+    TypeInfo getTypeInfo(Expr *expr);
+
+    const char* getDeclstr(Decl *decl);
 };
 
 

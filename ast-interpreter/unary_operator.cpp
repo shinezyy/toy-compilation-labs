@@ -12,8 +12,7 @@ void Environment::unaryOp(UnaryOperator *unaryOperator) {
     if (unaryOperator->getOpcode() == UO_Deref) {
         Value value = mStack.front().getStmtVal(subExpr);
         logp(PointerVisit, value.address);
-        log_var(PointerVisit, value.pointerLevel);
-        mStack.front().bindStmt(unaryOperator, deRef(value));
+        mStack.front().bindStmt(unaryOperator, value);
 
     } else if (unaryOperator->getOpcode() == UO_Minus) {
         Value value = mStack.front().getStmtVal(subExpr);

@@ -12,8 +12,12 @@ void Environment::declRef(DeclRefExpr *declRefexpr) {
     if (qualType->isPointerType()) {
         assert(decl);
         Value val = mStack.front().getDeclVal(decl);
+        if (const char *id = getDeclstr(decl)) {
+            log(PointerVisit, "Referenced var: %s\n", id);
+        } else {
+            logs(PointerVisit, "Referenced var id not found\n");
+        }
         logp(PointerVisit, val.address);
-        log_var(PointerVisit, val.pointerLevel);
         mStack.front().bindStmt(declRefexpr, val);
 
     } else if (declRefexpr->getType()->isIntegerType()) {
@@ -33,7 +37,6 @@ void Environment::decl(DeclStmt *declstmt) {
         Decl *decl = *it;
         if (VarDecl *var_decl = dyn_cast<VarDecl>(decl)) {
             Expr *initExpr = var_decl->getInit();
-
             //<editor-fold desc="Integer init">
             if (initExpr) {
                 if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(initExpr)) {
@@ -49,14 +52,13 @@ void Environment::decl(DeclStmt *declstmt) {
             // TODO: Let consumer know "This is default value, not initialized"
 
             int pLevel = getPointerLevel(var_decl->getType());
-            unsigned long pSize = getPointeeSize(pLevel);
 
             Value default_value;
             if (pLevel == 0) {
                 logs(PointerVisit, "Not pointer\n");
                 default_value.typ = Int;
-                default_value.pointerLevel = 0;
                 mStack.front().bindDecl(var_decl, default_value);
+
             } else {
                 log(PointerVisit, "Lv %i pointer\n", pLevel);
 
@@ -64,16 +66,12 @@ void Environment::decl(DeclStmt *declstmt) {
                     Value initVal = mStack.front().getStmtVal(initExpr);
 
                     // pointer info can only be obtained from here
-                    initVal.pointerLevel = pLevel;
-                    initVal.pointeeSize = pSize;
 
                     logp(PointerVisit, initVal.address);
                     mStack.front().bindDecl(var_decl, initVal);
 
                 } else {
                     default_value.typ = Address;
-                    default_value.pointerLevel = pLevel;
-                    default_value.pointeeSize = pSize;
                     mStack.front().bindDecl(var_decl, default_value);
                 }
             }
