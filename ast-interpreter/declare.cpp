@@ -51,13 +51,23 @@ void Environment::decl(DeclStmt *declstmt) {
 
             // TODO: Let consumer know "This is default value, not initialized"
 
-            int pLevel = getPointerLevel(var_decl->getType());
+            QualType decl_type = var_decl->getType();
+            int pLevel = getPointerLevel(decl_type);
 
             Value default_value;
             if (pLevel == 0) {
                 logs(PointerVisit, "Not pointer\n");
-                default_value.typ = Int;
-                mStack.front().bindDecl(var_decl, default_value);
+
+                if (decl_type->isArrayType()) { // is array
+                    // only support int []
+                    // TODO: how to get array size
+
+//                    mStack.front().bindDecl(var_decl, x);
+
+                } else {
+                    default_value.typ = Int;
+                    mStack.front().bindDecl(var_decl, default_value);
+                }
 
             } else {
                 log(PointerVisit, "Lv %i pointer\n", pLevel);

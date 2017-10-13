@@ -3,7 +3,7 @@
 //
 
 // Overall debug flag
-bool ZYY_DEBUG = false;
+bool ZYY_DEBUG = true;
 
 // separated debug flags
 bool ValueBinding = true;
@@ -14,9 +14,9 @@ bool ControlStmt = false;
 
 bool PointerVisit = true;
 
-bool DeclVisit = false;
+bool DeclVisit = true;
 
 bool CastVisit = true;
 
-bool HeapState = true;
+bool HeapState = false;
 
