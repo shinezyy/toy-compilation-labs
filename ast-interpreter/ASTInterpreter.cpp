@@ -100,6 +100,11 @@ public:
         mEnv->CStyleCast(expr);
     }
 
+    virtual void VisitParenExpr(ParenExpr *expr) {
+        VisitStmt(expr);
+        mEnv->paren(expr);
+    }
+
 private:
     Environment *mEnv;
 };

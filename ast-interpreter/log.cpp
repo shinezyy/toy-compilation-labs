@@ -3,7 +3,7 @@
 //
 
 // Overall debug flag
-bool ZYY_DEBUG = true;
+bool ZYY_DEBUG = false;
 
 // separated debug flags
 bool ValueBinding = true;

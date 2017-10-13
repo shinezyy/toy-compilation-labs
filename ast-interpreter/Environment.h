@@ -140,6 +140,12 @@ public:
     size_t getDeRefPointeeSize(UnaryOperator *unaryOperator);
 
     bool isDerefExpr(Expr *expr);
+
+    void paren(ParenExpr *parenExpr) {
+        Expr *expr = parenExpr->getSubExpr();
+        Value val = mStack.front().getStmtVal(expr);
+        mStack.front().bindStmt(parenExpr, val);
+    }
 };
 
 
