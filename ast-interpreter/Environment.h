@@ -25,6 +25,8 @@ public:
 
 private:
 
+    const ASTContext &context;
+
     Heap heap;
 
     FunctionDecl *mFree;                /// Declartions to the built-in functions
@@ -36,8 +38,12 @@ private:
 
 public:
     /// Get the declartions to the built-in functions
-    Environment() : mStack(), mFree(nullptr), mMalloc(nullptr),
-                    mInput(nullptr), mOutput(nullptr), mEntry(nullptr) {
+    Environment(const ASTContext &astContext_) :
+            mStack(), context(astContext_),
+            mFree(nullptr), mMalloc(nullptr),
+            mInput(nullptr), mOutput(nullptr),
+            mEntry(nullptr)
+    {
     }
 
 
@@ -127,9 +133,9 @@ public:
         if (expr->isArgumentType()) {
             // using sizeof(Type)
             QualType argType = expr->getType();
-            int pLevel = getPointerLevel(argType);
-            auto pSize = static_cast<int>(getPointeeSize(pLevel));
-            mStack.front().bindStmt(expr, Value(pSize));
+            TypeInfo typeInfo = context.getTypeInfo(argType);
+            log_var(PointerVisit, (int) typeInfo.Width);
+            mStack.front().bindStmt(expr, Value((int) typeInfo.Width/8));
 
         } else {
             assert(false);

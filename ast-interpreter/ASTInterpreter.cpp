@@ -101,7 +101,7 @@ private:
 
 class InterpreterConsumer : public ASTConsumer {
 public:
-    explicit InterpreterConsumer(const ASTContext &context) : mEnv(),
+    explicit InterpreterConsumer(const ASTContext &context) : mEnv(context),
                                                               mVisitor(context, &mEnv) {
     }
 
