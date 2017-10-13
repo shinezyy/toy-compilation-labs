@@ -4,20 +4,22 @@
 #include <string>
 
 // Overall debug flag
-#define ZYY_DEBUG true
+extern bool ZYY_DEBUG;
 
 // separated debug flags
-#define ValueBinding false
+extern bool ValueBinding;
 
-#define FunctionCall false
+extern bool FunctionCall;
 
-#define ControlStmt false
+extern bool ControlStmt;
 
-#define PointerVisit false
+extern bool PointerVisit;
 
-#define DeclVisit false
+extern bool DeclVisit;
 
 extern bool CastVisit;
+
+extern bool HeapState;
 
 #define log(debug_flags, format,...) \
     do {\

@@ -68,7 +68,14 @@ void Environment::binOp(BinaryOperator *bop) {
 
         if (DeclRefExpr *declExpr = dyn_cast<DeclRefExpr>(left)) {
             Decl *decl = declExpr->getFoundDecl();
-            mStack.front().bindDecl(decl, rightValue);
+            if (!left->getType()->isPointerType()) {
+                mStack.front().bindDecl(decl, rightValue);
+            } else {
+                Value leftValue = mStack.front().getStmtVal(left);
+                Value newValue(leftValue);
+                newValue.address = rightValue.address;
+                mStack.front().bindDecl(decl, newValue);
+            }
 
         } else if (UnaryOperator *unaryOperator = dyn_cast<UnaryOperator>(left)){
             if (unaryOperator->getOpcode() == UO_Deref) {

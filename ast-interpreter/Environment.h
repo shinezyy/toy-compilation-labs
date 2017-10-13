@@ -123,12 +123,17 @@ public:
     unsigned long getPointeeSize(int pointerLevel);
 
     void unaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *expr) {
-        if (IntegerLiteral * IL = dyn_cast<IntegerLiteral>(expr)) {
-            int val = static_cast<int>(IL->getValue().getLimitedValue());
-            mStack.front().bindStmt(expr, Value(val));
-            return;
+
+        if (expr->isArgumentType()) {
+            // using sizeof(Type)
+            QualType argType = expr->getType();
+            int pLevel = getPointerLevel(argType);
+            auto pSize = static_cast<int>(getPointeeSize(pLevel));
+            mStack.front().bindStmt(expr, Value(pSize));
+
+        } else {
+            assert(false);
         }
-        assert(false);
     }
 };
 

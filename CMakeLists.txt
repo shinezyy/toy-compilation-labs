@@ -159,7 +159,7 @@ set(SOURCE_FILES
         ast-interpreter/declare.cpp
         ast-interpreter/binary_operator.cpp
         ast-interpreter/call_ret.cpp
-        ast-interpreter/cast.cpp ast-interpreter/value.cpp)
+        ast-interpreter/cast.cpp ast-interpreter/value.cpp ast-interpreter/log.cpp)
 
 include_directories(ast-interpreter)
 include_directories(include)

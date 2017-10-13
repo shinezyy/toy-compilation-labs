@@ -34,8 +34,10 @@ public:
         auto lower = addressMap.lower_bound(address);
         log(PointerVisit, "Address: %p\n", address);
         assert(lower != addressMap.end());
-        assert((unsigned long) lower->first + lower->second >
-                       (unsigned long) address);
+        if ((unsigned long) lower->first + lower->second <= (unsigned long) address) {
+            print();
+            assert(false);
+        }
         return true;
     }
 
@@ -48,10 +50,14 @@ public:
         assert(noWild(address));
         return *address;
     }
+
+    void print() {
+        for (auto it = addressMap.begin(), end = addressMap.end();
+                it != end; ++it) {
+            log(HeapState, "Address: %p, size: %lu\n", it->first, it->second);
+        }
+    }
 };
 
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/FrontendAction.h"
-#include "log.h"
 
 #endif //CLANG_DEVEL_CLION_HEAP_H

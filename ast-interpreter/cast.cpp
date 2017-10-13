@@ -4,8 +4,6 @@
 
 #include "Environment.h"
 
-bool CastVisit = true;
-
 void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
 
     CastKind castKind = implicitCastExpr->getCastKind();
