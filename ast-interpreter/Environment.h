@@ -74,18 +74,7 @@ public:
 
     Value deRef(Value &value);
 
-    void unaryOp(UnaryOperator *unaryOperator) {
-        logs(PointerVisit, "Visiting Unary Operator\n");
-        Expr *subExpr = unaryOperator->getSubExpr();
-
-        if (unaryOperator->getOpcode() == UO_Deref) {
-            Value value = mStack.front().getStmtVal(subExpr);
-            logp(PointerVisit, value.address);
-            log_var(PointerVisit, value.pointerLevel);
-            mStack.front().bindStmt(unaryOperator, deRef(value));
-        }
-        logs(PointerVisit, "Visited Unary Operator\n");
-    }
+    void unaryOp(UnaryOperator *unaryOperator);
 
     void decl(DeclStmt *declstmt);
 
@@ -141,6 +130,8 @@ public:
             assert(false);
         }
     }
+
+    void CStyleCast (CStyleCastExpr* castExpr);
 };
 
 

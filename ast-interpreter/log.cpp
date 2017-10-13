@@ -12,11 +12,11 @@ bool FunctionCall = false;
 
 bool ControlStmt = false;
 
-bool PointerVisit = true;
+bool PointerVisit = false;
 
-bool DeclVisit = true;
+bool DeclVisit = false;
 
 bool CastVisit = false;
 
-bool HeapState = true;
+bool HeapState = false;
 

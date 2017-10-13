@@ -95,14 +95,20 @@ public:
         mEnv->unaryExprOrTypeTraitExpr(expr);
     }
 
+    virtual void VisitCStyleCastExpr(CStyleCastExpr *expr) {
+        VisitStmt(expr);
+        mEnv->CStyleCast(expr);
+    }
+
 private:
     Environment *mEnv;
 };
 
 class InterpreterConsumer : public ASTConsumer {
 public:
-    explicit InterpreterConsumer(const ASTContext &context) : mEnv(context),
-                                                              mVisitor(context, &mEnv) {
+    explicit InterpreterConsumer(const ASTContext &context) :
+            mEnv(context),
+            mVisitor(context, &mEnv) {
     }
 
     ~InterpreterConsumer() override = default;

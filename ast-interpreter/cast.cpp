@@ -47,3 +47,11 @@ void Environment::cast(CastExpr *castExpr) {
     }
 }
 
+void Environment::CStyleCast(CStyleCastExpr *castExpr) {
+    logs(PointerVisit, "Visiting C style cast expr\n");
+
+    Expr *expr = castExpr->getSubExpr();
+    Value val = mStack.front().getStmtVal(expr);
+    mStack.front().bindStmt(castExpr, val);
+}
+
