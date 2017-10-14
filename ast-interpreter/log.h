@@ -21,6 +21,8 @@ extern bool CastVisit;
 
 extern bool HeapState;
 
+extern bool ArrayVisit;
+
 #define log(debug_flags, format,...) \
     do {\
         if (ZYY_DEBUG && (debug_flags)) { \

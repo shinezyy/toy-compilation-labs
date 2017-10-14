@@ -141,11 +141,15 @@ public:
 
     bool isDerefExpr(Expr *expr);
 
+    size_t getArrayMemberSize(ArraySubscriptExpr *array);
+
     void paren(ParenExpr *parenExpr) {
         Expr *expr = parenExpr->getSubExpr();
         Value val = mStack.front().getStmtVal(expr);
         mStack.front().bindStmt(parenExpr, val);
     }
+
+    void arrayDeRef(ArraySubscriptExpr *arraySubscriptExpr);
 };
 
 

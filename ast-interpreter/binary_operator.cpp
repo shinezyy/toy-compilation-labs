@@ -54,7 +54,6 @@ void Environment::DispatchComputation(BinaryOperator *binaryOperator, Value &x, 
     mStack.front().bindStmt(binaryOperator, Value(result));
 }
 
-#undef lambda_helper
 
 void Environment::binOp(BinaryOperator *bop) {
     logs(PointerVisit, "Visiting Binary Operator\n");
@@ -85,6 +84,11 @@ void Environment::binOp(BinaryOperator *bop) {
                 log(PointerVisit, "Updating size: %lu\n", pointee_size);
                 updateMem(mStack.front().getStmtVal(left), rightValue, pointee_size);
             }
+
+        } else if (auto array = dyn_cast<ArraySubscriptExpr>(left)){
+            size_t member_size = getArrayMemberSize(array);
+            log(ArrayVisit, "Updating size: %lu\n", member_size);
+            updateMem(mStack.front().getStmtVal(left), rightValue, member_size);
         }
 
         mStack.front().bindStmt(bop, rightValue);
@@ -96,17 +100,41 @@ void Environment::binOp(BinaryOperator *bop) {
 //        assert(left_value.typ == right_value.typ);
 //        assert(getExprType(left) == getExprType(right));
 
-        // Make sure pointee size is only used here
-        if (getPointerLevel(getExprType(left)) > 1) {
+        // Make sure pointee size is only used here and arrayDeRef
+        int p_level = getPointerLevel(getExprType(left));
+        if (p_level > 1) {
             left_value.pointeeSize = 8;
             right_value.pointeeSize = 8;
-        } else {
+        } else if (p_level == 1) {
             left_value.pointeeSize = 4;
             right_value.pointeeSize = 4;
+        } else {
+            assert(left_value.typ == Int);
+            assert(right_value.typ == Int);
         }
-
         DispatchComputation(bop, left_value, right_value);
     }
     logs(PointerVisit, "Visited Binary Operator\n");
 }
 
+void Environment::arrayDeRef(ArraySubscriptExpr *arraySubscriptExpr) {
+    Expr *left = arraySubscriptExpr->getBase();
+    Expr *right = arraySubscriptExpr->getIdx();
+
+    Value left_value = mStack.front().getStmtVal(left);
+    Value right_value = mStack.front().getStmtVal(right);
+
+    int p_level = getPointerLevel(getExprType(left));
+    if (p_level > 1) {
+        left_value.pointeeSize = 8;
+    } else if (p_level == 1) {
+        left_value.pointeeSize = 4;
+    } else {
+        assert(false);
+    }
+    Value val = compute(left_value, right_value, lambda_helper(+));
+    mStack.front().bindStmt(arraySubscriptExpr, val);
+}
+
+
+#undef lambda_helper

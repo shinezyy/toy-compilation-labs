@@ -105,6 +105,11 @@ public:
         mEnv->paren(expr);
     }
 
+    virtual void VisitArraySubscriptExpr(ArraySubscriptExpr *expr) {
+        VisitStmt(expr);
+        mEnv->arrayDeRef(expr);
+    }
+
 private:
     Environment *mEnv;
 };

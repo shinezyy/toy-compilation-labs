@@ -56,13 +56,24 @@ void Environment::decl(DeclStmt *declstmt) {
 
             Value default_value;
             if (pLevel == 0) {
-                logs(PointerVisit, "Not pointer\n");
+                logs(PointerVisit || ArrayVisit, "Not pointer\n");
 
                 if (decl_type->isArrayType()) { // is array
                     // only support int []
-                    // TODO: how to get array size
 
-//                    mStack.front().bindDecl(var_decl, x);
+                    // Get array size
+                    auto array = dyn_cast<ConstantArrayType>(decl_type);
+                    assert(array);
+                    uint64_t array_size = array->getSize().getLimitedValue();
+
+                    auto member_type = array->getPointeeOrArrayElementType();
+                    auto member_type_info = context.getTypeInfo(member_type);
+
+                    //NOTE that array is placed in heap
+                    void *allocatedAddress =
+                            heap.Malloc((int)(array_size * member_type_info.Width / 8));
+                    logp(ArrayVisit, allocatedAddress);
+                    mStack.front().bindDecl(var_decl, Value(allocatedAddress));
 
                 } else {
                     default_value.typ = Int;

@@ -17,6 +17,7 @@ void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
 
         auto unary_operator = dyn_cast<UnaryOperator>(castedExpr);
         auto decl_ref = dyn_cast<DeclRefExpr>(castedExpr);
+        auto array = dyn_cast<ArraySubscriptExpr>(castedExpr);
 
         if (decl_ref) {
             log(CastVisit, "cast var %s into RValue\n",
@@ -29,13 +30,25 @@ void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
                 auto pointee_size = getDeRefPointeeSize(unary_operator);
                 log_var(PointerVisit || CastVisit, (int) pointee_size);
                 if (pointee_size == 4) {
-                    auto x = heap.get((int *)value.address);
+                    auto x = heap.get((int *) value.address);
                     mStack.front().bindStmt(implicitCastExpr, Value(x));
                 } else {
                     assert(pointee_size == 8);
-                    auto x = heap.get((void **)value.address);
+                    auto x = heap.get((void **) value.address);
                     mStack.front().bindStmt(implicitCastExpr, Value(x));
                 }
+            }
+
+        } else if (array) {
+            auto member_size = getArrayMemberSize(array);
+            log_var(ArrayVisit || CastVisit, (int) member_size);
+            if (member_size == 4) {
+                auto x = heap.get((int *) value.address);
+                mStack.front().bindStmt(implicitCastExpr, Value(x));
+            } else {
+                assert(member_size == 8);
+                auto x = heap.get((void **) value.address);
+                mStack.front().bindStmt(implicitCastExpr, Value(x));
             }
 
         } else {
@@ -45,7 +58,8 @@ void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
     } else if (castKind == CK_FunctionToPointerDecay){
         return;
 
-    } else if (castKind == CK_IntegralCast){
+    } else if (castKind == CK_IntegralCast ||
+            castKind == CK_ArrayToPointerDecay){
         Value value = mStack.front().getStmtVal(castedExpr);
         mStack.front().bindStmt(implicitCastExpr, value);
 

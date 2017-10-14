@@ -20,3 +20,5 @@ bool CastVisit = true;
 
 bool HeapState = false;
 
+bool ArrayVisit = false;
+

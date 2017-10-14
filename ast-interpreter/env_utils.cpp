@@ -74,3 +74,12 @@ size_t Environment::getDeRefPointeeSize(UnaryOperator *unaryOperator) {
 
 }
 
+size_t Environment::getArrayMemberSize(ArraySubscriptExpr *array) {
+    Expr *left = array->getBase();
+    auto array_type = left->getType();
+    auto member_type = context.getTypeInfo(array_type);
+    log_var(ArrayVisit, (int) member_type.Width);
+    return member_type.Width / 8;
+}
+
+
