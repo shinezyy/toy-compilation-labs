@@ -91,11 +91,17 @@ public:
         Stmt *body = forStmt->getBody();
         Expr *inc = forStmt->getInc();
 
-        this->Visit(init_stmt);
+        if (init_stmt) {
+            this->Visit(init_stmt);
+        }
         this->Visit(condition_expr);
         while (mEnv->getCondition(condition_expr)) {
-            this->Visit(body);
-            this->Visit(inc);
+            if (body) {
+                this->Visit(body);
+            }
+            if (inc) {
+                this->Visit(inc);
+            }
             this->Visit(condition_expr);
         }
     }

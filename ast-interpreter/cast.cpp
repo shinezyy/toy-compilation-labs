@@ -53,6 +53,7 @@ void Environment::implicitCast(ImplicitCastExpr *implicitCastExpr) {
 
         } else {
             logs(CastVisit, "Unknown implicit cast\n");
+            mStack.front().bindStmt(implicitCastExpr, value);
         }
 
     } else if (castKind == CK_FunctionToPointerDecay){
