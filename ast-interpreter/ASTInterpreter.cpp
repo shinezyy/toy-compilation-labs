@@ -85,6 +85,21 @@ public:
         }
     }
 
+    virtual void VisitForStmt(ForStmt *forStmt) {
+        Stmt *init_stmt = forStmt->getInit();
+        Expr *condition_expr = forStmt->getCond();
+        Stmt *body = forStmt->getBody();
+        Expr *inc = forStmt->getInc();
+
+        this->Visit(init_stmt);
+        this->Visit(condition_expr);
+        while (mEnv->getCondition(condition_expr)) {
+            this->Visit(body);
+            this->Visit(inc);
+            this->Visit(condition_expr);
+        }
+    }
+
     virtual void VisitReturnStmt(ReturnStmt *returnStmt) {
         VisitStmt(returnStmt);
         mEnv->setReturnVal(returnStmt);
