@@ -76,10 +76,17 @@ size_t Environment::getDeRefPointeeSize(UnaryOperator *unaryOperator) {
 
 size_t Environment::getArrayMemberSize(ArraySubscriptExpr *array) {
     Expr *left = array->getBase();
-    auto array_type = left->getType();
-    auto member_type = context.getTypeInfo(array_type);
-    log_var(ArrayVisit, (int) member_type.Width);
-    return member_type.Width / 8;
+    QualType left_type = left->getType();
+    auto left_as_pointer = dyn_cast<PointerType>(left_type);
+    assert(left_as_pointer);
+
+    auto member_type = left_as_pointer->getPointeeOrArrayElementType();
+    log(ArrayVisit, "member type: %s\n", member_type->getTypeClassName());
+
+    auto member_type_info = context.getTypeInfo(member_type);
+
+    log_var(ArrayVisit, (int) member_type_info.Width);
+    return member_type_info.Width / 8;
 }
 
 

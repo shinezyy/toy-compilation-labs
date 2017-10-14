@@ -9,15 +9,15 @@ void Environment::declRef(DeclRefExpr *declRefexpr) {
     QualType qualType = declRefexpr->getType();
     Decl *decl = declRefexpr->getFoundDecl();
 
-    if (qualType->isPointerType()) {
+    if (qualType->isPointerType() || qualType->isArrayType()) {
         assert(decl);
         Value val = mStack.front().getDeclVal(decl);
         if (const char *id = getDeclstr(decl)) {
-            log(PointerVisit, "Referenced var: %s\n", id);
+            log(PointerVisit || ArrayVisit, "Referenced var: %s\n", id);
         } else {
-            logs(PointerVisit, "Referenced var id not found\n");
+            logs(PointerVisit || ArrayVisit, "Referenced var id not found\n");
         }
-        logp(PointerVisit, val.address);
+        logp(PointerVisit || ArrayVisit, val.address);
         mStack.front().bindStmt(declRefexpr, val);
 
     } else if (declRefexpr->getType()->isIntegerType()) {
@@ -26,6 +26,11 @@ void Environment::declRef(DeclRefExpr *declRefexpr) {
             log_var(DeclVisit, val.intValue);
             mStack.front().bindStmt(declRefexpr, val);
         }
+
+    } else if (declRefexpr->getType()->isFunctionType()) {
+
+    } else {
+        assert(false && "Unexpected decl ref");
     }
 }
 
