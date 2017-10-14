@@ -70,6 +70,7 @@ void Environment::decl(DeclStmt *declstmt) {
                     auto array = dyn_cast<ConstantArrayType>(decl_type);
                     assert(array);
                     uint64_t array_size = array->getSize().getLimitedValue();
+                    log_var(ArrayVisit, (int) array_size);
 
                     auto member_type = array->getPointeeOrArrayElementType();
                     auto member_type_info = context.getTypeInfo(member_type);

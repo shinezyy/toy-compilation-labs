@@ -18,7 +18,7 @@ bool DeclVisit = true;
 
 bool CastVisit = true;
 
-bool HeapState = false;
+bool HeapState = true;
 
 bool ArrayVisit = true;
 

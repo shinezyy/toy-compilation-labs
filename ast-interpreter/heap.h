@@ -6,13 +6,20 @@
 #define CLANG_DEVEL_CLION_HEAP_H
 
 class Heap {
-    std::map<void *, size_t> addressMap;
+
+    struct less {
+        bool operator() (const unsigned long& lhs, const unsigned long& rhs) const {
+            return lhs > rhs;
+        }
+    };
+
+    std::map<unsigned long, size_t, less> addressMap;
 
 public:
     void *Malloc(int size) {
         log(HeapState, "Allocating size: %d\n", size);
         auto *buf = (void *) malloc(static_cast<size_t>(size));
-        addressMap.insert(std::make_pair(buf, size));
+        addressMap.insert(std::make_pair((unsigned long) buf, size));
         return buf;
     }
 
@@ -32,12 +39,18 @@ public:
     }
 
     bool noWild(void *address) {
-        auto lower = addressMap.lower_bound(address);
-        log(PointerVisit, "Address: %p\n", address);
-        assert(lower != addressMap.end());
-        if ((unsigned long) lower->first + lower->second <= (unsigned long) address) {
+        auto lower = addressMap.lower_bound((unsigned long) address);
+        auto upper = addressMap.upper_bound((unsigned long) address);
+        log(PointerVisit || ArrayVisit, "Address: %p\n", address);
+
+        if (upper != addressMap.end()) {
+            log(PointerVisit || ArrayVisit, "Upper Address: %p\n",
+                (void *)upper->first);
+        }
+        if (lower == addressMap.end() ||
+                lower->first + lower->second <= (unsigned long) address) {
             print();
-            assert(false);
+            assert(false && "Access Violation");
         }
         return true;
     }
@@ -55,7 +68,7 @@ public:
     void print() {
         for (auto it = addressMap.begin(), end = addressMap.end();
                 it != end; ++it) {
-            log(HeapState, "Address: %p, size: %lu\n", it->first, it->second);
+            log(HeapState, "Address: %p, size: %lu\n", (void *)it->first, it->second);
         }
     }
 };
