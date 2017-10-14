@@ -25,10 +25,6 @@ public:
     StackFrame() : mVars(), mExprs(), mPC() {
     }
 
-//    void bindDecl(clang::Decl *decl, Value &value) {
-//        mVars[decl] = value;
-//    }
-
     void bindDecl(clang::Decl *decl, Value value) {
         mVars[decl] = value;
     }
@@ -38,9 +34,9 @@ public:
         return mVars.find(decl)->second;
     }
 
-//    void bindStmt(clang::Stmt *stmt, Value &value) {
-//        mExprs[stmt] = value;
-//    }
+    bool hasDecl(clang::Decl *decl) {
+        return mVars.find(decl) != mVars.end();
+    }
 
     void bindStmt(clang::Stmt *stmt, Value value) {
         mExprs[stmt] = value;

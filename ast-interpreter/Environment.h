@@ -49,6 +49,7 @@ public:
 
     /// Initialize the Environment
     void init(TranslationUnitDecl *unit) {
+        mStack.push_front(StackFrame()); // For global var
         for (TranslationUnitDecl::decl_iterator i = unit->decls_begin(),
                      e = unit->decls_end(); i != e; ++i) {
             if (FunctionDecl *fdecl = dyn_cast<FunctionDecl>(*i)) {
@@ -57,9 +58,12 @@ public:
                 else if (fdecl->getName().equals("GET")) mInput = fdecl;
                 else if (fdecl->getName().equals("PRINT")) mOutput = fdecl;
                 else if (fdecl->getName().equals("main")) mEntry = fdecl;
+
+            } else if (VarDecl *var_decl = dyn_cast<VarDecl>(*i)) {
+                varDeclVisit(var_decl);
             }
         }
-        mStack.push_back(StackFrame());
+        mStack.push_front(StackFrame()); //For main
     }
 
     FunctionDecl *getEntry() {
@@ -74,9 +78,9 @@ public:
 
     void unaryOp(UnaryOperator *unaryOperator);
 
-    void decl(DeclStmt *declstmt);
+    void decl(DeclStmt *declStmt);
 
-    void declRef(DeclRefExpr *declRefexpr);
+    void declRef(DeclRefExpr *declRefExpr);
 
     void cast(CastExpr *castExpr);
 
@@ -150,6 +154,10 @@ public:
     }
 
     void arrayDeRef(ArraySubscriptExpr *arraySubscriptExpr);
+
+    void varDeclVisit(VarDecl *varDecl);
+
+    Value getDeclVal(Decl *decl);
 };
 
 
