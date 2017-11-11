@@ -7,5 +7,5 @@ rsync -arzvL --update \
     --no-perms --no-owner --no-group \
     -e 'ssh -p 22' \
     . \
-    zyy@124.16.84.210:/home/zyy/clang-devel-clion/
+    zyy@124.16.84.86:/home/zyy/clang-devel-clion/
 
