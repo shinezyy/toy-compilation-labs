@@ -22,6 +22,8 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Use.h>
+#include <llvm/IR/User.h>
 
 #include <llvm/Transforms/Scalar.h>
 
@@ -77,9 +79,9 @@ struct FuncPtrPass : public ModulePass {
     FuncPtrPass() : ModulePass(ID) {}
 
     using PossibleFuncList = std::list<Value*>;
-    std::map<llvm::CallInst*, PossibleFuncList> callMap;
-    std::map<llvm::PHINode*, PossibleFuncList> phiMap;
-    std::map<llvm::Function*, PossibleFuncList> functionMap;
+    std::map<llvm::CallInst*, PossibleFuncList> callMap{};
+    std::map<llvm::PHINode*, PossibleFuncList> phiMap{};
+    std::map<llvm::Function*, PossibleFuncList> functionMap{};
 
     void initMap(Module &module) {
         // TODO: find all phi of func ptr and function calls
@@ -108,8 +110,8 @@ struct FuncPtrPass : public ModulePass {
     }
 
     void printMaps() {
-        printMap(functionMap);
-        printMap(callMap);
+//        printMap(functionMap);
+//        printMap(callMap);
         printMap(phiMap);
     }
 
@@ -143,6 +145,12 @@ struct FuncPtrPass : public ModulePass {
 
     bool processPhi(PHINode *phiNode) {
         // TODO: for phi, add all phied possible list to possible list
+        for (unsigned i = 0, e = phiNode->getNumIncomingValues();
+                i != e; i++) {
+            auto value = phiNode->getIncomingValue(i);
+            errs() << "Value" << i << "  ------------------\n";
+            errs() << *value << "\n";
+        }
         return false;
     }
 
@@ -155,6 +163,8 @@ struct FuncPtrPass : public ModulePass {
         errs().write_escaped(module.getName()) << '\n';
 
         initMap(module);
+
+        printMaps();
 
         while (iterate(module));
 
