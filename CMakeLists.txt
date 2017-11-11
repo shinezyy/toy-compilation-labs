@@ -3,166 +3,34 @@ project(clang_devel_clion)
 
 set(CMAKE_CXX_STANDARD 11)
 
-set(SOURCE_FILES
-        ast-interpreter/ASTInterpreter.cpp
-        ast-interpreter/Environment.h
-        include/clang/AST/APValue.h
-        include/clang/AST/AST.h
-        include/clang/AST/ASTConsumer.h
-        include/clang/AST/ASTContext.h
-        include/clang/AST/ASTDiagnostic.h
-        include/clang/AST/ASTFwd.h
-        include/clang/AST/ASTImporter.h
-        include/clang/AST/ASTLambda.h
-        include/clang/AST/ASTMutationListener.h
-        include/clang/AST/ASTStructuralEquivalence.h
-        include/clang/AST/ASTTypeTraits.h
-        include/clang/AST/ASTUnresolvedSet.h
-        include/clang/AST/ASTVector.h
-        include/clang/AST/Attr.h
-        include/clang/AST/AttrIterator.h
-        include/clang/AST/Availability.h
-        include/clang/AST/BaseSubobject.h
-        include/clang/AST/BuiltinTypes.def
-        include/clang/AST/CanonicalType.h
-        include/clang/AST/CharUnits.h
-        include/clang/AST/CMakeLists.txt
-        include/clang/AST/Comment.h
-        include/clang/AST/CommentBriefParser.h
-        include/clang/AST/CommentCommands.td
-        include/clang/AST/CommentCommandTraits.h
-        include/clang/AST/CommentDiagnostic.h
-        include/clang/AST/CommentHTMLNamedCharacterReferences.td
-        include/clang/AST/CommentHTMLTags.td
-        include/clang/AST/CommentLexer.h
-        include/clang/AST/CommentParser.h
-        include/clang/AST/CommentSema.h
-        include/clang/AST/CommentVisitor.h
-        include/clang/AST/CXXInheritance.h
-        include/clang/AST/Decl.h
-        include/clang/AST/DeclAccessPair.h
-        include/clang/AST/DeclarationName.h
-        include/clang/AST/DeclBase.h
-        include/clang/AST/DeclContextInternals.h
-        include/clang/AST/DeclCXX.h
-        include/clang/AST/DeclFriend.h
-        include/clang/AST/DeclGroup.h
-        include/clang/AST/DeclLookups.h
-        include/clang/AST/DeclObjC.h
-        include/clang/AST/DeclOpenMP.h
-        include/clang/AST/DeclTemplate.h
-        include/clang/AST/DeclVisitor.h
-        include/clang/AST/DependentDiagnostic.h
-        include/clang/AST/EvaluatedExprVisitor.h
-        include/clang/AST/Expr.h
-        include/clang/AST/ExprCXX.h
-        include/clang/AST/ExprObjC.h
-        include/clang/AST/ExprOpenMP.h
-        include/clang/AST/ExternalASTMerger.h
-        include/clang/AST/ExternalASTSource.h
-        include/clang/AST/GlobalDecl.h
-        include/clang/AST/LambdaCapture.h
-        include/clang/AST/LocInfoType.h
-        include/clang/AST/Mangle.h
-        include/clang/AST/MangleNumberingContext.h
-        include/clang/AST/NestedNameSpecifier.h
-        include/clang/AST/NSAPI.h
-        include/clang/AST/ODRHash.h
-        include/clang/AST/OpenMPClause.h
-        include/clang/AST/OperationKinds.def
-        include/clang/AST/OperationKinds.h
-        include/clang/AST/ParentMap.h
-        include/clang/AST/PrettyPrinter.h
-        include/clang/AST/RawCommentList.h
-        include/clang/AST/RecordLayout.h
-        include/clang/AST/RecursiveASTVisitor.h
-        include/clang/AST/Redeclarable.h
-        include/clang/AST/SelectorLocationsKind.h
-        include/clang/AST/Stmt.h
-        include/clang/AST/StmtCXX.h
-        include/clang/AST/StmtGraphTraits.h
-        include/clang/AST/StmtIterator.h
-        include/clang/AST/StmtObjC.h
-        include/clang/AST/StmtOpenMP.h
-        include/clang/AST/StmtVisitor.h
-        include/clang/AST/TemplateBase.h
-        include/clang/AST/TemplateName.h
-        include/clang/AST/Type.h
-        include/clang/AST/TypeLoc.h
-        include/clang/AST/TypeLocNodes.def
-        include/clang/AST/TypeLocVisitor.h
-        include/clang/AST/TypeNodes.def
-        include/clang/AST/TypeOrdering.h
-        include/clang/AST/TypeVisitor.h
-        include/clang/AST/UnresolvedSet.h
-        include/clang/AST/VTableBuilder.h
-        include/clang/AST/VTTBuilder.h
-        include/clang/Frontend/ASTConsumers.h
-        include/clang/Frontend/ASTUnit.h
-        include/clang/Frontend/ChainedDiagnosticConsumer.h
-        include/clang/Frontend/CodeGenOptions.def
-        include/clang/Frontend/CodeGenOptions.h
-        include/clang/Frontend/CommandLineSourceLoc.h
-        include/clang/Frontend/CompilerInstance.h
-        include/clang/Frontend/CompilerInvocation.h
-        include/clang/Frontend/DependencyOutputOptions.h
-        include/clang/Frontend/DiagnosticRenderer.h
-        include/clang/Frontend/FrontendAction.h
-        include/clang/Frontend/FrontendActions.h
-        include/clang/Frontend/FrontendDiagnostic.h
-        include/clang/Frontend/FrontendOptions.h
-        include/clang/Frontend/FrontendPluginRegistry.h
-        include/clang/Frontend/LangStandard.h
-        include/clang/Frontend/LangStandards.def
-        include/clang/Frontend/LayoutOverrideSource.h
-        include/clang/Frontend/LogDiagnosticPrinter.h
-        include/clang/Frontend/MigratorOptions.h
-        include/clang/Frontend/MultiplexConsumer.h
-        include/clang/Frontend/PCHContainerOperations.h
-        include/clang/Frontend/PrecompiledPreamble.h
-        include/clang/Frontend/PreprocessorOutputOptions.h
-        include/clang/Frontend/SerializedDiagnosticPrinter.h
-        include/clang/Frontend/SerializedDiagnosticReader.h
-        include/clang/Frontend/SerializedDiagnostics.h
-        include/clang/Frontend/TextDiagnostic.h
-        include/clang/Frontend/TextDiagnosticBuffer.h
-        include/clang/Frontend/TextDiagnosticPrinter.h
-        include/clang/Frontend/Utils.h
-        include/clang/Frontend/VerifyDiagnosticConsumer.h
-        include/clang/Tooling/Core/Diagnostic.h
-        include/clang/Tooling/Core/Lookup.h
-        include/clang/Tooling/Core/QualTypeNames.h
-        include/clang/Tooling/Core/Replacement.h
-        include/clang/Tooling/Refactoring/Rename/RenamingAction.h
-        include/clang/Tooling/Refactoring/Rename/USRFinder.h
-        include/clang/Tooling/Refactoring/Rename/USRFindingAction.h
-        include/clang/Tooling/Refactoring/Rename/USRLocFinder.h
-        include/clang/Tooling/Refactoring/AtomicChange.h
-        include/clang/Tooling/Refactoring/RecursiveSymbolVisitor.h
-        include/clang/Tooling/ArgumentsAdjusters.h
-        include/clang/Tooling/CommonOptionsParser.h
-        include/clang/Tooling/CompilationDatabase.h
-        include/clang/Tooling/CompilationDatabasePluginRegistry.h
-        include/clang/Tooling/DiagnosticsYaml.h
-        include/clang/Tooling/FileMatchTrie.h
-        include/clang/Tooling/FixIt.h
-        include/clang/Tooling/JSONCompilationDatabase.h
-        include/clang/Tooling/Refactoring.h
-        include/clang/Tooling/RefactoringCallbacks.h
-        include/clang/Tooling/ReplacementsYaml.h
-        include/clang/Tooling/Tooling.h
-        ast-interpreter/log.h
-        ast-interpreter/value.h
-        ast-interpreter/stack.h
-        ast-interpreter/heap.h
-        ast-interpreter/env_utils.cpp
-        ast-interpreter/declare.cpp
-        ast-interpreter/binary_operator.cpp
-        ast-interpreter/call_ret.cpp
-        ast-interpreter/cast.cpp ast-interpreter/value.cpp ast-interpreter/log.cpp ast-interpreter/unary_operator.cpp)
+file(GLOB project_include
+        llvm-include/llvm/Pass.h
 
-include_directories(ast-interpreter)
-include_directories(include)
+        llvm-include/llvm/IR/*.h
+        llvm-include/llvm/IR/*.def
+
+        llvm-include/llvm/Support/*.h
+        llvm-include/llvm/Support/*.def
+
+        llvm-include/llvm/IRReader/*.h
+        llvm-include/llvm/IRReader/*.def
+
+        llvm-include/llvm/Transforms/*.h
+        llvm-include/llvm/Transforms/*.def
+
+        llvm-include/llvm/Bitcode/*.h
+        llvm-include/llvm/Bitcode/*.def
+        )
+
+set(SOURCE_FILES
+        ${project_include}
+
+        func-pointer/LLVMAssignment.cpp
+        func-pointer/log.cpp
+        func-pointer/log.h
+        )
+
+include_directories(func-pointer)
 include_directories(llvm-include)
 
 add_executable(clang_devel_clion ${SOURCE_FILES})
