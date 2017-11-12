@@ -84,6 +84,30 @@ struct FuncPtrPass : public ModulePass {
     std::map<llvm::PHINode*, PossibleFuncPtrList> phiMap{};
     std::map<llvm::Function*, PossibleFuncPtrList> functionMap{};
 
+    bool unionPossibleList(PossibleFuncPtrList &dst, PossibleFuncPtrList &src) {
+        auto updated = false;
+        for (auto it: src) {
+            if (std::find(dst.begin(), dst.end(), it) == dst.end()) {
+                dst.push_back(it);
+                updated = true;
+            }
+        }
+        return updated;
+    }
+
+    bool unionPossibleList(PossibleFuncPtrList &dst, Value *value) {
+        auto updated = false;
+        if (CallInst *callInst = dyn_cast<CallInst>(value)) {
+            assert(callMap.find(callInst) != callMap.end());
+            updated = unionPossibleList(dst, callMap[callInst]) || updated;
+
+        } else if (auto phied_phi_node = dyn_cast<PHINode>(value)) {
+            assert(phiMap.find(phied_phi_node) != phiMap.end());
+            updated = unionPossibleList(dst, phiMap[phied_phi_node]) || updated;
+        }
+        return updated;
+    }
+
     void initMap(Module &module) {
         // TODO: find all phi of func ptr and function calls
         for (auto &function: module.getFunctionList()) {
@@ -116,20 +140,23 @@ struct FuncPtrPass : public ModulePass {
         printMap(phiMap);
     }
 
+    int numIter{};
+
     bool iterate(Module &module) {
         // TODO: update all phi and function calls
+        errs() << "Iteration " << numIter++ << "====================\n";
         bool updated = false;
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
                 for (auto &inst : bb) {
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
-                        updated = updated || processCall(callInst);
+                        updated = processCall(callInst) || updated;
                     } else if (auto phi = dyn_cast<PHINode>(&inst)) {
-                        updated = updated || processPhi(phi);
+                        updated = processPhi(phi) || updated;
                     }
                 }
             }
-            updated = updated || processFunction(&function);
+            updated = processFunction(&function) || updated;
         }
         return updated;
     }
@@ -146,15 +173,25 @@ struct FuncPtrPass : public ModulePass {
 
     bool processPhi(PHINode *phiNode) {
         // TODO: for phi, add all phied possible list to possible list
+        errs() << "phi is called\n";
+        if (!isFunctionPointer(phiNode->getType())) {
+            errs() << "Phi Node is not function pointer\n";
+            return false;
+        }
+
         bool updated = false;
+        PossibleFuncPtrList &possible_list = phiMap[phiNode];
+
         for (unsigned i = 0, e = phiNode->getNumIncomingValues();
                 i != e; i++) {
             auto value = phiNode->getIncomingValue(i);
             assert(phiMap.find(phiNode) != phiMap.end());
 
-            PossibleFuncPtrList &possible_list = phiMap[phiNode];
-
             // add phied values into possible list
+
+            if (isa<PHINode>(value)) { // ignore phi node
+                continue;
+            }
             if (std::find(possible_list.begin(), possible_list.end(),
                           value) == possible_list.end()) {
                 possible_list.push_back(value);
@@ -164,54 +201,49 @@ struct FuncPtrPass : public ModulePass {
             }
 
             // add possible list of phied values into possible list
-            if (CallInst *callInst = dyn_cast<CallInst>(value)) {
-                assert(callMap.find(callInst) != callMap.end());
-                for (auto &possible_value : callMap[callInst]) {
-                    if (std::find(possible_list.begin(), possible_list.end(),
-                                  possible_value) == possible_list.end()) {
-                        possible_list.push_back(possible_value);
-                        updated = true;
-                    }
-                }
-            } else if (auto phied_phi_node = dyn_cast<PHINode>(value)) {
-                assert(phiMap.find(phied_phi_node) != phiMap.end());
-                for (auto &possible_value : phiMap[phied_phi_node]) {
-                    if (std::find(possible_list.begin(), possible_list.end(),
-                                  possible_value) == possible_list.end()) {
-                        possible_list.push_back(possible_value);
-                        updated = true;
-                    }
-                }
-            }
+            updated = unionPossibleList(possible_list, value) || updated;
+
         }
-        if (!updated) {
-            errs() << "Nothing updated\n";
+        if (updated) {
+            errs() << "Something updated for Phi Node\n";
+        } else {
+            errs() << "Nothing updated for Phi Node\n";
         }
         return updated;
     }
 
+    bool isFunctionPointer(Type *type) {
+        if (!type->isPointerTy()) {
+            return false;
+        }
+        auto pointee = type->getPointerElementType();
+        return pointee->isFunctionTy();
+    }
+
     bool processFunction(Function *function) {
         // TODO: for functions, if return value is function ptr,
+        // add their possible values to functionMap
 
-        auto t = function->getType();
-        auto ret = function->getReturnType();
-        errs() << function->getName() << "'s Type is \n";
-        errs() << *t << "\n";
-        errs() << "Return Type is: " << *ret << "\n";
-        if (ret->isPointerTy()) {
-            auto pointee_type = ret->getPointerElementType();
-            if (pointee_type->isFunctionTy())
-                errs() << "Found Fucking function return function pointer!!!!\n";
+        auto returnType = function->getReturnType();
+        if (!isFunctionPointer(returnType)) {
+            return false;
         }
 
-//        for (auto &bb : *function) {
-//            for (auto &inst : bb) {
-//                if (auto returnInst = dyn_cast<ReturnInst>(&inst)) {
-//
-//                }
-//            }
-//        }
-        return false;
+        bool updated = false;
+        assert(functionMap.find(function) != functionMap.end());
+        for (auto &bb : *function) {
+            for (auto &inst : bb) {
+                if (auto returnInst = dyn_cast<ReturnInst>(&inst)) {
+                    auto value = returnInst->getReturnValue();
+                    // 函数总是后序遍历的，因此这里假设这些value的possible list 已经有了
+                    updated = unionPossibleList(functionMap[function], value) || updated;
+                }
+            }
+        }
+        if (!updated) {
+            errs() << "Nothing updated for Function\n";
+        }
+        return updated;
     }
 
     bool runOnModule(Module &module) override {
@@ -219,11 +251,11 @@ struct FuncPtrPass : public ModulePass {
 
         initMap(module);
 
-//        printMaps();
+        printMaps();
 
         while (iterate(module));
 
-//        printMaps();
+        printMaps();
 #ifdef NEVER_DEFINED
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
