@@ -187,11 +187,30 @@ struct FuncPtrPass : public ModulePass {
         if (!updated) {
             errs() << "Nothing updated\n";
         }
-        return false;
+        return updated;
     }
 
     bool processFunction(Function *function) {
         // TODO: for functions, if return value is function ptr,
+
+        auto t = function->getType();
+        auto ret = function->getReturnType();
+        errs() << function->getName() << "'s Type is \n";
+        errs() << *t << "\n";
+        errs() << "Return Type is: " << *ret << "\n";
+        if (ret->isPointerTy()) {
+            auto pointee_type = ret->getPointerElementType();
+            if (pointee_type->isFunctionTy())
+                errs() << "Found Fucking function return function pointer!!!!\n";
+        }
+
+//        for (auto &bb : *function) {
+//            for (auto &inst : bb) {
+//                if (auto returnInst = dyn_cast<ReturnInst>(&inst)) {
+//
+//                }
+//            }
+//        }
         return false;
     }
 
@@ -200,11 +219,11 @@ struct FuncPtrPass : public ModulePass {
 
         initMap(module);
 
-        printMaps();
+//        printMaps();
 
         while (iterate(module));
 
-        printMaps();
+//        printMaps();
 #ifdef NEVER_DEFINED
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
