@@ -22,8 +22,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Use.h>
-#include <llvm/IR/User.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 
 #include <llvm/Transforms/Scalar.h>
 
@@ -83,13 +82,17 @@ struct FuncPtrPass : public ModulePass {
     std::map<llvm::CallInst*, PossibleFuncPtrList> callMap{};
     std::map<llvm::PHINode*, PossibleFuncPtrList> phiMap{};
     std::map<llvm::Function*, PossibleFuncPtrList> functionMap{};
+    std::map<llvm::Argument*, PossibleFuncPtrList> argMap{};
 
     bool unionPossibleList(PossibleFuncPtrList &dst, PossibleFuncPtrList &src) {
         auto updated = false;
         for (auto it: src) {
             if (std::find(dst.begin(), dst.end(), it) == dst.end()) {
                 dst.push_back(it);
+//                errs() << "Insert " << *it << " into dst\n";
                 updated = true;
+            } else {
+//                errs() << *it << " already in dst\n";
             }
         }
         return updated;
@@ -104,6 +107,11 @@ struct FuncPtrPass : public ModulePass {
         } else if (auto phi_node = dyn_cast<PHINode>(value)) {
             assert(phiMap.find(phi_node) != phiMap.end());
             updated = unionPossibleList(dst, phiMap[phi_node]) || updated;
+
+        } else if (auto arg = dyn_cast<Argument>(value)) {
+            assert(argMap.find(arg) != argMap.end());
+//            errs() << "Unioning possible list for argument\n";
+            updated = unionPossibleList(dst, argMap[arg]) || updated;
         }
         return updated;
     }
@@ -117,7 +125,11 @@ struct FuncPtrPass : public ModulePass {
             assert(phiMap.find(phi_node) != phiMap.end());
             return phiMap[phi_node];
 
-        } else if (auto function = dyn_cast<Function>(value)) {
+        } else if (auto arg = dyn_cast<Argument>(value)) {
+            assert(argMap.find(arg) != argMap.end());
+            return argMap[arg];
+
+        } else if (isa<Function>(value)) {
             return PossibleFuncPtrList(1, value);
 
         } else {
@@ -130,6 +142,9 @@ struct FuncPtrPass : public ModulePass {
         // TODO: find all phi of func ptr and function calls
         for (auto &function: module.getFunctionList()) {
             functionMap[&function] = PossibleFuncPtrList();
+            for (auto &arg : function.args()) {
+                argMap[&arg] = PossibleFuncPtrList();
+            }
             for (auto &bb : function) {
                 for (auto &inst : bb) {
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
@@ -145,6 +160,9 @@ struct FuncPtrPass : public ModulePass {
     template <class T>
     void printMap(T t) {
         for (auto &map_it: t) {
+            if (isDebugCall(map_it.first)) {
+                continue;
+            }
             errs() << *(map_it.first) << " ----------------------------- \n";
             for (auto &list_it: map_it.second) {
                 if (list_it->getName() == "") {
@@ -159,42 +177,124 @@ struct FuncPtrPass : public ModulePass {
     void printMaps() {
 //        printMap(functionMap);
 //        printMap(callMap);
-        printMap(phiMap);
+//        printMap(phiMap);
+        printMap(argMap);
     }
 
     int numIter{};
 
+    bool processStore(StoreInst *storeInst) {
+//        errs() << "Process Store Inst\n";
+        auto dst = storeInst->getPointerOperand();
+        if (!isFunctionPointer(dst->getType())) {
+            return false;
+        }
+
+        if (auto dst_arg = dyn_cast<Argument>(dst)) {
+            PossibleFuncPtrList &possibleList = argMap[dst_arg];
+            Value *value = storeInst->getValueOperand();
+            if (std::find(possibleList.begin(), possibleList.end(),
+                          value) == possibleList.end()) {
+                possibleList.push_back(value);
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool iterate(Module &module) {
         // TODO: update all phi and function calls
-        errs() << "Iteration " << numIter++ << "====================\n";
+//        errs() << "Iteration " << numIter << "====================\n";
         bool updated = false;
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
                 for (auto &inst : bb) {
+//                    errs() << inst << "||||\n";
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
                         updated = processCall(callInst) || updated;
                     } else if (auto phi = dyn_cast<PHINode>(&inst)) {
                         updated = processPhi(phi) || updated;
+                    } else if (auto store = dyn_cast<StoreInst>(&inst)) {
+                        updated = processStore(store) || updated;
                     }
                 }
             }
             updated = processFunction(&function) || updated;
         }
+//        errs() << "End Iteration " << numIter++ << "====================\n";
         return updated;
+    }
+
+    template <class T>
+    bool isDebugCall(T callInst) {
+        return isa<DbgValueInst>(callInst);
+    }
+
+    StringRef funcNameWrapper(Function *function) {
+        if (!function || function->getName() == "") {
+            return "NULL";
+
+        } else {
+            return function->getName();
+        }
+    }
+
+    void printCalls(Module &module) {
+        for (auto &function: module.getFunctionList()) {
+            for (auto &bb : function) {
+                for (auto &inst : bb) {
+                    if (auto callInst = dyn_cast<CallInst>(&inst)) {
+                        if (isDebugCall(callInst)) {
+                            continue;
+                        }
+                        auto calledValue = callInst->getCalledValue();
+                        bool isCallingValue = calledValue != nullptr;
+                        std::list<Value *> &&possible_func_list =
+                                isCallingValue ? std::move(getPossibleList(calledValue)) :
+                                PossibleFuncPtrList(1, callInst->getCalledFunction());
+                        MDNode *metadata = callInst->getMetadata(0);
+                        if (!metadata) {
+                            errs() << "No meta data found for " << *callInst;
+                            continue;
+                        }
+                        DILocation *debugLocation = dyn_cast<DILocation>(metadata);
+                        if (!debugLocation) {
+                            errs() << "No debug location found for " << *callInst;
+                            continue;
+                        }
+                        errs() << debugLocation->getLine() << " : ";
+                        bool first = true;
+                        for (auto value : possible_func_list) {
+                            auto func = dyn_cast<Function>(value);
+//                            assert(func);
+                            if (!func|| func->getName() == "") {
+                                continue;
+                            }
+                            if (!first) {
+                                errs() << ", ";
+                            } else {
+                                first = false;
+                            }
+                            errs() << func->getName();
+                        }
+                        errs() << "\n";
+                    }
+                }
+            }
+        }
     }
 
     bool processCall(CallInst *callInst) {
         // TODO: for call, add all phied possible list to possible list
         // If parameter is func ptr, add corresponding possible list to arg's possible list
 
-        if (DbgValueInst *dbgValueInst = dyn_cast<DbgValueInst>(callInst)) {
+        if (isDebugCall(callInst)) {
             // ignore these calls
             return false;
         }
+        bool updated = false;
         auto calledValue = callInst->getCalledValue();
 
-        bool hasFuncPtrArg; // has function pointer arguments
-        bool isReturnFuncPtr;
         bool isCallingValue = calledValue != nullptr;
 
         // TODO: function pointer consumption
@@ -204,9 +304,51 @@ struct FuncPtrPass : public ModulePass {
 
         // TODO: function pointer arg
 
-        // TODO: function pointer return value
+//        errs() << "CallInst:" << *callInst << " ----------------------\n";
+        for (auto value : possible_func_list) {
+//            errs() << "Called value:" << *value << "\n";
+            Function *func = dyn_cast<Function>(value);
+            if (!func) {
+//                errs() << "null\n";
+                continue;
+            } else {
+//                errs() << func->getName() << "\n";
+            }
+            unsigned i = 0;
+            for (auto &arg : func->args()) {
+                if (!isFunctionPointer(arg.getType())) {
+                    i++;
+                    continue;
+                }
+//                    errs() << "pass possible list for argument\n";
+                auto arg_in = callInst->getArgOperand(i);
+//                    errs() << i << "th Arg:" << arg.getName() << "<---" << arg_in->getName() << "\n";
+                if (isa<Function>(arg_in)) {
+                    PossibleFuncPtrList &possibleList = argMap[&arg];
+                    if (std::find(possibleList.begin(), possibleList.end(),
+                                  arg_in) == possibleList.end()) {
+                        possibleList.push_back(arg_in);
+                        updated = true;
+                    }
 
-        return false;
+                } else {
+                    updated = unionPossibleList(argMap[&arg], arg_in) || updated;
+                }
+                i++;
+            }
+        }
+
+        // TODO: function pointer return value
+        for (auto value : possible_func_list) {
+            Function *func = dyn_cast<Function>(value);
+            if (!func || func->getName() == "") {
+                continue;
+            }
+//            errs() << func->getName() << "\n";
+            updated = unionPossibleList(callMap[callInst], functionMap[func]) || updated;
+        }
+
+        return updated;
 
 
 #ifdef NEVER_DEFINED
@@ -225,9 +367,9 @@ struct FuncPtrPass : public ModulePass {
 
     bool processPhi(PHINode *phiNode) {
         // TODO: for phi, add all phied possible list to possible list
-        errs() << "phi is called\n";
+//        errs() << "phi is called\n";
         if (!isFunctionPointer(phiNode->getType())) {
-            errs() << "Phi Node is not function pointer\n";
+//            errs() << "Phi Node is not function pointer\n";
             return false;
         }
 
@@ -254,11 +396,11 @@ struct FuncPtrPass : public ModulePass {
             updated = unionPossibleList(possible_list, incomingValue) || updated;
 
         }
-        if (updated) {
-            errs() << "Something updated for Phi Node\n";
-        } else {
-            errs() << "Nothing updated for Phi Node\n";
-        }
+//        if (updated) {
+//            errs() << "Something updated for Phi Node\n";
+//        } else {
+//            errs() << "Nothing updated for Phi Node\n";
+//        }
         return updated;
     }
 
@@ -290,9 +432,9 @@ struct FuncPtrPass : public ModulePass {
                 }
             }
         }
-        if (!updated) {
-            errs() << "Nothing updated for Function\n";
-        }
+//        if (!updated) {
+//            errs() << "Nothing updated for Function\n";
+//        }
         return updated;
     }
 
@@ -301,11 +443,13 @@ struct FuncPtrPass : public ModulePass {
 
         initMap(module);
 
-        printMaps();
+//        printMaps();
 
         while (iterate(module));
 
-        printMaps();
+        printCalls(module);
+
+//        printMaps();
 #ifdef NEVER_DEFINED
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
@@ -339,7 +483,7 @@ struct FuncPtrPass : public ModulePass {
         }
 #endif
 
-        errs() << "------------------------------\n";
+//        errs() << "------------------------------\n";
         return false;
     }
 };
