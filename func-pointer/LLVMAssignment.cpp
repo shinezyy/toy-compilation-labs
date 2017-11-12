@@ -34,6 +34,7 @@
 
 #include <map>
 #include <list>
+#include <algorithm>
 
 #if LLVM_VERSION_MAJOR >= 4
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -78,21 +79,21 @@ struct FuncPtrPass : public ModulePass {
     static char ID; // Pass identification, replacement for typeid
     FuncPtrPass() : ModulePass(ID) {}
 
-    using PossibleFuncList = std::list<Value*>;
-    std::map<llvm::CallInst*, PossibleFuncList> callMap{};
-    std::map<llvm::PHINode*, PossibleFuncList> phiMap{};
-    std::map<llvm::Function*, PossibleFuncList> functionMap{};
+    using PossibleFuncPtrList = std::list<Value*>;
+    std::map<llvm::CallInst*, PossibleFuncPtrList> callMap{};
+    std::map<llvm::PHINode*, PossibleFuncPtrList> phiMap{};
+    std::map<llvm::Function*, PossibleFuncPtrList> functionMap{};
 
     void initMap(Module &module) {
         // TODO: find all phi of func ptr and function calls
         for (auto &function: module.getFunctionList()) {
-            functionMap[&function] = PossibleFuncList();
+            functionMap[&function] = PossibleFuncPtrList();
             for (auto &bb : function) {
                 for (auto &inst : bb) {
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
-                        callMap[callInst] = PossibleFuncList();
+                        callMap[callInst] = PossibleFuncPtrList();
                     } else if (auto phi = dyn_cast<PHINode>(&inst)) {
-                        phiMap[phi] = PossibleFuncList();
+                        phiMap[phi] = PossibleFuncPtrList();
                     }
                 }
             }
@@ -102,9 +103,9 @@ struct FuncPtrPass : public ModulePass {
     template <class T>
     void printMap(T t) {
         for (auto &map_it: t) {
-            errs() << *(map_it.first) << "\n";
+            errs() << *(map_it.first) << " ----------------------------- \n";
             for (auto &list_it: map_it.second) {
-                errs() << list_it << "\n";
+                errs() << *list_it << "\n";
             }
         }
     }
@@ -145,11 +146,46 @@ struct FuncPtrPass : public ModulePass {
 
     bool processPhi(PHINode *phiNode) {
         // TODO: for phi, add all phied possible list to possible list
+        bool updated = false;
         for (unsigned i = 0, e = phiNode->getNumIncomingValues();
                 i != e; i++) {
             auto value = phiNode->getIncomingValue(i);
-            errs() << "Value" << i << "  ------------------\n";
-            errs() << *value << "\n";
+            assert(phiMap.find(phiNode) != phiMap.end());
+
+            PossibleFuncPtrList &possible_list = phiMap[phiNode];
+
+            // add phied values into possible list
+            if (std::find(possible_list.begin(), possible_list.end(),
+                          value) == possible_list.end()) {
+                possible_list.push_back(value);
+                updated = true;
+//                    errs() << "Value" << i << "  ------------------\n";
+//                    errs() << *value << "\n";
+            }
+
+            // add possible list of phied values into possible list
+            if (CallInst *callInst = dyn_cast<CallInst>(value)) {
+                assert(callMap.find(callInst) != callMap.end());
+                for (auto &possible_value : callMap[callInst]) {
+                    if (std::find(possible_list.begin(), possible_list.end(),
+                                  possible_value) == possible_list.end()) {
+                        possible_list.push_back(possible_value);
+                        updated = true;
+                    }
+                }
+            } else if (auto phied_phi_node = dyn_cast<PHINode>(value)) {
+                assert(phiMap.find(phied_phi_node) != phiMap.end());
+                for (auto &possible_value : phiMap[phied_phi_node]) {
+                    if (std::find(possible_list.begin(), possible_list.end(),
+                                  possible_value) == possible_list.end()) {
+                        possible_list.push_back(possible_value);
+                        updated = true;
+                    }
+                }
+            }
+        }
+        if (!updated) {
+            errs() << "Nothing updated\n";
         }
         return false;
     }
@@ -168,6 +204,7 @@ struct FuncPtrPass : public ModulePass {
 
         while (iterate(module));
 
+        printMaps();
 #ifdef NEVER_DEFINED
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
