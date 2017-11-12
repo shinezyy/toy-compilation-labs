@@ -97,15 +97,33 @@ struct FuncPtrPass : public ModulePass {
 
     bool unionPossibleList(PossibleFuncPtrList &dst, Value *value) {
         auto updated = false;
-        if (CallInst *callInst = dyn_cast<CallInst>(value)) {
-            assert(callMap.find(callInst) != callMap.end());
-            updated = unionPossibleList(dst, callMap[callInst]) || updated;
+        if (CallInst *call_inst = dyn_cast<CallInst>(value)) {
+            assert(callMap.find(call_inst) != callMap.end());
+            updated = unionPossibleList(dst, callMap[call_inst]) || updated;
 
-        } else if (auto phied_phi_node = dyn_cast<PHINode>(value)) {
-            assert(phiMap.find(phied_phi_node) != phiMap.end());
-            updated = unionPossibleList(dst, phiMap[phied_phi_node]) || updated;
+        } else if (auto phi_node = dyn_cast<PHINode>(value)) {
+            assert(phiMap.find(phi_node) != phiMap.end());
+            updated = unionPossibleList(dst, phiMap[phi_node]) || updated;
         }
         return updated;
+    }
+
+    PossibleFuncPtrList getPossibleList(Value *value) {
+        if (CallInst *call_inst = dyn_cast<CallInst>(value)) {
+            assert(callMap.find(call_inst) != callMap.end());
+            return callMap[call_inst];
+
+        } else if (auto phi_node = dyn_cast<PHINode>(value)) {
+            assert(phiMap.find(phi_node) != phiMap.end());
+            return phiMap[phi_node];
+
+        } else if (auto function = dyn_cast<Function>(value)) {
+            return PossibleFuncPtrList(1, value);
+
+        } else {
+            errs() << *value;
+            assert("Unexpected value type!\n" && false);
+        }
     }
 
     void initMap(Module &module) {
@@ -129,7 +147,11 @@ struct FuncPtrPass : public ModulePass {
         for (auto &map_it: t) {
             errs() << *(map_it.first) << " ----------------------------- \n";
             for (auto &list_it: map_it.second) {
-                errs() << *list_it << "\n";
+                if (list_it->getName() == "") {
+                    errs() << "null\n";
+                } else {
+                    errs() << list_it->getName() << "\n";
+                }
             }
         }
     }
@@ -164,11 +186,41 @@ struct FuncPtrPass : public ModulePass {
     bool processCall(CallInst *callInst) {
         // TODO: for call, add all phied possible list to possible list
         // If parameter is func ptr, add corresponding possible list to arg's possible list
-        bool isCallingValue;
+
+        if (DbgValueInst *dbgValueInst = dyn_cast<DbgValueInst>(callInst)) {
+            // ignore these calls
+            return false;
+        }
+        auto calledValue = callInst->getCalledValue();
+
         bool hasFuncPtrArg; // has function pointer arguments
         bool isReturnFuncPtr;
+        bool isCallingValue = calledValue != nullptr;
+
+        // TODO: function pointer consumption
+        std::list<Value *> &&possible_func_list =
+                isCallingValue ? std::move(getPossibleList(calledValue)) :
+                PossibleFuncPtrList(1, callInst->getCalledFunction());
+
+        // TODO: function pointer arg
+
+        // TODO: function pointer return value
 
         return false;
+
+
+#ifdef NEVER_DEFINED
+        errs() << "CallInst:" << *callInst << " ----------------------\n";
+        for (auto value : possible_func_list) {
+            Function *func = dyn_cast<Function>(value);
+            assert(func);
+            if (func->getName() == "") {
+                errs() << "null\n";
+            } else {
+                errs() << func->getName() << "\n";
+            }
+        }
+#endif
     }
 
     bool processPhi(PHINode *phiNode) {
@@ -184,24 +236,22 @@ struct FuncPtrPass : public ModulePass {
 
         for (unsigned i = 0, e = phiNode->getNumIncomingValues();
                 i != e; i++) {
-            auto value = phiNode->getIncomingValue(i);
+            auto incomingValue = phiNode->getIncomingValue(i);
             assert(phiMap.find(phiNode) != phiMap.end());
 
             // add phied values into possible list
 
-            if (isa<PHINode>(value)) { // ignore phi node
-                continue;
-            }
-            if (std::find(possible_list.begin(), possible_list.end(),
-                          value) == possible_list.end()) {
-                possible_list.push_back(value);
+            if (!isa<PHINode>(incomingValue) &&
+                    std::find(possible_list.begin(), possible_list.end(),
+                              incomingValue) == possible_list.end()) {
+                possible_list.push_back(incomingValue);
                 updated = true;
 //                    errs() << "Value" << i << "  ------------------\n";
-//                    errs() << *value << "\n";
+//                    errs() << *incomingValue << "\n";
             }
 
             // add possible list of phied values into possible list
-            updated = unionPossibleList(possible_list, value) || updated;
+            updated = unionPossibleList(possible_list, incomingValue) || updated;
 
         }
         if (updated) {
