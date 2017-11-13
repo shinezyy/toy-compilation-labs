@@ -266,9 +266,6 @@ struct FuncPtrPass : public ModulePass {
                                         }
                                     }
                                 }
-//                                errs() << cmp->getOpcodeName(1) << "\n";
-//                                errs() << *op1 << "\n";
-//                                errs() << *op2 << "\n";
                             }
                         }
                     }
@@ -330,6 +327,7 @@ struct FuncPtrPass : public ModulePass {
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
                 for (auto &inst : bb) {
+                    unsigned null_count = 0, pointer_count = 0;
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
                         if (isDebugCall(callInst)) {
                             continue;
@@ -341,12 +339,12 @@ struct FuncPtrPass : public ModulePass {
                                 PossibleFuncPtrList(1, callInst->getCalledFunction());
                         MDNode *metadata = callInst->getMetadata(0);
                         if (!metadata) {
-//                            errs() << "No meta data found for " << *callInst;
+                            errs() << "No meta data found for " << *callInst;
                             continue;
                         }
                         DILocation *debugLocation = dyn_cast<DILocation>(metadata);
                         if (!debugLocation) {
-//                            errs() << "No debug location found for " << *callInst;
+                            errs() << "No debug location found for " << *callInst;
                             continue;
                         }
                         unsigned current_line = debugLocation->getLine();
@@ -363,8 +361,10 @@ struct FuncPtrPass : public ModulePass {
                             auto func = dyn_cast<Function>(value);
 //                            assert(func);
                             if (!func|| func->getName() == "") {
+                                null_count ++;
                                 continue;
                             }
+                            pointer_count++;
                             if (!first_in_current_line) {
                                 errs() << ", ";
                             } else {
@@ -373,6 +373,11 @@ struct FuncPtrPass : public ModulePass {
                             errs() << func->getName();
                         }
                         last_line = current_line;
+                        if (null_count == 0 && pointer_count == 1 &&
+                                ! isa<Function>(callInst->getCalledValue())) {
+                            errs() << *callInst << "->";
+                            errs() << "*U";
+                        }
                     }
                 }
             }
