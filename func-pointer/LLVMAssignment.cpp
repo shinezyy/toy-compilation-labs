@@ -129,8 +129,6 @@ struct FuncPtrPass : public ModulePass {
             return callMap[call_inst];
 
         } else if (auto phi_node = dyn_cast<PHINode>(value)) {
-#define NEW_TEST
-#ifdef NEW_TEST
             PossibleFuncPtrList possibleFuncPtrList;
             for (unsigned i = 0, e = phi_node->getNumIncomingValues();
                  i != e; i++) {
@@ -144,10 +142,6 @@ struct FuncPtrPass : public ModulePass {
                 }
             }
             return possibleFuncPtrList;
-#else
-            return phiMap[phi_node];
-#endif
-
 
         } else if (auto arg = dyn_cast<Argument>(value)) {
             assert(argMap.find(arg) != argMap.end());
@@ -330,10 +324,10 @@ struct FuncPtrPass : public ModulePass {
     }
 
     void printCalls(Module &module) {
+        unsigned last_line = 0;
+        bool first_in_current_line = true;
+        bool first_line = true;
         for (auto &function: module.getFunctionList()) {
-            unsigned last_line = 0;
-            bool first_in_current_line = true;
-            bool first_line = true;
             for (auto &bb : function) {
                 for (auto &inst : bb) {
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
