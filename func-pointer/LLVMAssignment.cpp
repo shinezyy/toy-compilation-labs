@@ -264,7 +264,7 @@ struct FuncPtrPass : public ModulePass {
 //                    errs() << *pred_head << "\n";
                 }
             }
-            updated = processFunction(&function) || updated;
+//            updated = processFunction(&function) || updated;
         }
 //        errs() << "End Iteration " << numIter++ << "====================\n";
         return updated;
@@ -388,11 +388,15 @@ struct FuncPtrPass : public ModulePass {
                     }
 
                 } else {
-                    updated = unionPossibleList(argMap[&arg], arg_in) || updated;
+                    PossibleFuncPtrList possibleFuncPtrList = getPossibleList(arg_in);
+                    updated = unionPossibleList(argMap[&arg], possibleFuncPtrList) || updated;
                 }
                 i++;
             }
+            processFunction(func);
         }
+
+
 
         // TODO: function pointer return value
         for (auto value : possible_func_list) {
@@ -402,6 +406,7 @@ struct FuncPtrPass : public ModulePass {
             }
 //            errs() << func->getName() << "\n";
             updated = unionPossibleList(callMap[callInst], functionMap[func]) || updated;
+            functionMap[func].clear();
         }
 
         return updated;
