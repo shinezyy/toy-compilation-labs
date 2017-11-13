@@ -31,6 +31,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include "llvm/Support/Casting.h"
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/IntrinsicInst.h>
 
 #include <map>
@@ -229,18 +230,48 @@ struct FuncPtrPass : public ModulePass {
 
     bool iterate(Module &module) {
         // TODO: update all phi and function calls
-//        errs() << "Iteration " << numIter << "====================\n";
+        errs() << "Iteration " << numIter << "====================\n";
         bool updated = false;
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
-                errs() << bb.getName() << "Preds:   ------------------\n";
+//                errs() << bb.getName() << "Preds:   ------------------\n";
                 for (auto pred_it = pred_begin(&bb), pred_e = pred_end(&bb);
                         pred_it != pred_e; ++pred_it) {
                     BasicBlock *chosen_pred = *pred_it;
                     auto pred_of_chosen_pred = chosen_pred->getUniquePredecessor();
+
+                    if (pred_of_chosen_pred) {
+                        TerminatorInst *br = pred_of_chosen_pred->getTerminator();
+                        if (CmpInst *cmp = dyn_cast<CmpInst>(br->getPrevNode())) {
+                            if(br->getOperand(0) == cmp) {
+                                auto op1 = cmp->getOperand(0);
+                                auto op2 = cmp->getOperand(1);
+                                llvm::ConstantInt *op1_int = dyn_cast<llvm::ConstantInt>(op1);
+                                llvm::ConstantInt *op2_int = dyn_cast<llvm::ConstantInt>(op2);
+                                if (op1_int && op2_int) {
+                                    if (cmp->getPredicate() == CmpInst::Predicate::ICMP_SGT &&
+                                        op1_int->getValue().getLimitedValue() >
+                                                op2_int->getValue().getLimitedValue()) {
+                                        if (chosen_pred == br->getSuccessor(1)) {
+                                            errs() << "skipped BB " << chosen_pred->getName() << ", because of dead\n";
+                                            continue;
+                                        }
+                                    }
+                                }
+//                                errs() << cmp->getOpcodeName(1) << "\n";
+//                                errs() << *op1 << "\n";
+//                                errs() << *op2 << "\n";
+                            }
+                        }
+                    }
+
                     for (auto pred_it_2 = pred_begin(&bb), pred_e_2 = pred_end(&bb);
                          pred_it_2 != pred_e_2; ++pred_it_2) {
-                        BasicBlock *killed_pred = *pred_it;
+                        BasicBlock *killed_pred = *pred_it_2;
+                        if (killed_pred == chosen_pred && !bb.getUniquePredecessor()) {
+                            errs() << "skipped BB " << killed_pred->getName() << ", because of kill\n";
+                            continue;
+                        }
                         auto pred_of_killed_pred = killed_pred->getUniquePredecessor();
                         if (pred_of_chosen_pred && pred_of_killed_pred &&
                                 pred_of_chosen_pred == pred_of_killed_pred) {
@@ -266,7 +297,7 @@ struct FuncPtrPass : public ModulePass {
             }
 //            updated = processFunction(&function) || updated;
         }
-//        errs() << "End Iteration " << numIter++ << "====================\n";
+        errs() << "End Iteration " << numIter++ << "====================\n";
         return updated;
     }
 
@@ -360,15 +391,16 @@ struct FuncPtrPass : public ModulePass {
 
         // TODO: function pointer arg
 
-//        errs() << "CallInst:" << *callInst << " ----------------------\n";
+        errs() << "CallInst:  " << *callInst << " ----------------------\n";
         for (auto value : possible_func_list) {
 //            errs() << "Called value:" << *value << "\n";
             Function *func = dyn_cast<Function>(value);
             if (!func) {
-//                errs() << "null\n";
+                errs() << "null\n";
                 continue;
             } else {
-//                errs() << func->getName() << "\n";
+                errs() << "Function: " << func->getName() << "   ==============\n";
+                errs() << *callInst << "\n";
             }
             unsigned i = 0;
             for (auto &arg : func->args()) {
@@ -390,6 +422,11 @@ struct FuncPtrPass : public ModulePass {
                 } else {
                     PossibleFuncPtrList possibleFuncPtrList = getPossibleList(arg_in);
                     updated = unionPossibleList(argMap[&arg], possibleFuncPtrList) || updated;
+                }
+                PossibleFuncPtrList &possibleList = argMap[&arg];
+                errs() << i << "th Arg: " << arg.getName() << "     --------------\n";
+                for (auto it : possibleList) {
+                    errs() << it->getName() << "||\n";
                 }
                 i++;
             }
@@ -433,6 +470,7 @@ struct FuncPtrPass : public ModulePass {
 //            errs() << "Phi Node is not function pointer\n";
             return false;
         }
+        errs() << "Phi: " << *phiNode << " ^^^^^\n";
 
         bool updated = false;
         PossibleFuncPtrList &possible_list = phiMap[phiNode];
@@ -442,7 +480,7 @@ struct FuncPtrPass : public ModulePass {
             auto incoming_value = phiNode->getIncomingValue(i);
             auto incoming_BB = phiNode->getIncomingBlock(i);
             if (incoming_BB == killedPred) {
-//                errs() << incoming_BB->getName() << " is killed and skipped\n";
+                errs() << incoming_BB->getName() << " is killed and skipped\n";
                 continue;
             }
             assert(phiMap.find(phiNode) != phiMap.end());
@@ -482,10 +520,10 @@ struct FuncPtrPass : public ModulePass {
         // TODO: for functions, if return value is function ptr,
         // add their possible values to functionMap
 
-        auto returnType = function->getReturnType();
-        if (!isFunctionPointer(returnType)) {
-            return false;
-        }
+//        auto returnType = function->getReturnType();
+//        if (!isFunctionPointer(returnType)) {
+//            return false;
+//        }
 
         bool updated = false;
         assert(functionMap.find(function) != functionMap.end());
@@ -495,6 +533,8 @@ struct FuncPtrPass : public ModulePass {
                     auto value = returnInst->getReturnValue();
                     // 函数总是后序遍历的，因此这里假设这些value的possible list 已经有了
                     updated = unionPossibleList(functionMap[function], value) || updated;
+                } else if (auto callInst = dyn_cast<CallInst>(&inst)) {
+                    updated = processCall(callInst) || updated;
                 }
             }
         }
