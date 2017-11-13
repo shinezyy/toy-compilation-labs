@@ -138,10 +138,7 @@ struct FuncPtrPass : public ModulePass {
                 auto incoming_value = phi_node->getIncomingValue(i);
                 auto incoming_BB = phi_node->getIncomingBlock(i);
                 if (incoming_BB != killedPred) {
-                    bool updated = unionPossibleList(possibleFuncPtrList, incoming_value);
-//                    errs() << incoming_BB->getName() << " is unioned, updated: " << updated << "\n";
-                } else {
-//                    errs() << incoming_BB->getName() << " is killed and skipped\n";
+                    unionPossibleList(possibleFuncPtrList, incoming_value);
                 }
             }
             return possibleFuncPtrList;
@@ -381,7 +378,8 @@ struct FuncPtrPass : public ModulePass {
                         if (null_count == 0 && pointer_count == 1 &&
                                 ! isa<Function>(callInst->getCalledValue())) {
                             callInst->setCalledFunction(unique_func);
-//                            errs() << *callInst << "->";
+                            errs()  << "    ---- Replace " << calledValue->getName() << " with "
+                                    << unique_func->getName();
 //                            errs() << "*U";
                         }
                     }
@@ -442,11 +440,11 @@ struct FuncPtrPass : public ModulePass {
                     PossibleFuncPtrList possibleFuncPtrList = getPossibleList(arg_in);
                     updated = unionPossibleList(argMap[&arg], possibleFuncPtrList) || updated;
                 }
-                PossibleFuncPtrList &possibleList = argMap[&arg];
+//                PossibleFuncPtrList &possibleList = argMap[&arg];
 //                errs() << i << "th Arg: " << arg.getName() << "     --------------\n";
-                for (auto it : possibleList) {
+//                for (auto it : possibleList) {
 //                    errs() << it->getName() << "||\n";
-                }
+//                }
                 i++;
             }
             processFunction(func);
