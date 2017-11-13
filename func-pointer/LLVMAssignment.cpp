@@ -241,6 +241,9 @@ struct FuncPtrPass : public ModulePass {
 
     void printCalls(Module &module) {
         for (auto &function: module.getFunctionList()) {
+            unsigned last_line = 0;
+            bool first_in_current_line = true;
+            bool first_line = true;
             for (auto &bb : function) {
                 for (auto &inst : bb) {
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
@@ -262,22 +265,30 @@ struct FuncPtrPass : public ModulePass {
                             errs() << "No debug location found for " << *callInst;
                             continue;
                         }
-                        errs() << debugLocation->getLine() << " : ";
-                        bool first = true;
+                        unsigned current_line = debugLocation->getLine();
+                        if (last_line != current_line) {
+                            first_in_current_line = true;
+                            if (!first_line) {
+                                errs() << "\n";
+                            } else {
+                                first_line = false;
+                            }
+                            errs() << current_line << " : ";
+                        }
                         for (auto value : possible_func_list) {
                             auto func = dyn_cast<Function>(value);
 //                            assert(func);
                             if (!func|| func->getName() == "") {
                                 continue;
                             }
-                            if (!first) {
+                            if (!first_in_current_line) {
                                 errs() << ", ";
                             } else {
-                                first = false;
+                                first_in_current_line = false;
                             }
                             errs() << func->getName();
                         }
-                        errs() << "\n";
+                        last_line = current_line;
                     }
                 }
             }
