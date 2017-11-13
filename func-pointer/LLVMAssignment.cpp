@@ -30,6 +30,8 @@
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
 #include "llvm/Support/Casting.h"
+#include <llvm/IR/CFG.h>
+#include <llvm/IR/IntrinsicInst.h>
 
 #include <map>
 #include <list>
@@ -42,7 +44,6 @@
 #else
 
 #include <llvm/Bitcode/ReaderWriter.h>
-#include <llvm/IR/IntrinsicInst.h>
 
 #endif
 using namespace llvm;
@@ -112,6 +113,11 @@ struct FuncPtrPass : public ModulePass {
             assert(argMap.find(arg) != argMap.end());
 //            errs() << "Unioning possible list for argument\n";
             updated = unionPossibleList(dst, argMap[arg]) || updated;
+        } else if (isa<Function>(value)) {
+            if (std::find(dst.begin(), dst.end(), value) == dst.end()) {
+                dst.push_back(value);
+                updated = true;
+            }
         }
         return updated;
     }
@@ -122,8 +128,25 @@ struct FuncPtrPass : public ModulePass {
             return callMap[call_inst];
 
         } else if (auto phi_node = dyn_cast<PHINode>(value)) {
-            assert(phiMap.find(phi_node) != phiMap.end());
+#define NEW_TEST
+#ifdef NEW_TEST
+            PossibleFuncPtrList possibleFuncPtrList;
+            for (unsigned i = 0, e = phi_node->getNumIncomingValues();
+                 i != e; i++) {
+                auto incoming_value = phi_node->getIncomingValue(i);
+                auto incoming_BB = phi_node->getIncomingBlock(i);
+                if (incoming_BB != killedPred) {
+                    bool updated = unionPossibleList(possibleFuncPtrList, incoming_value);
+                    errs() << incoming_BB->getName() << " is unioned, updated: " << updated << "\n";
+                } else {
+                    errs() << incoming_BB->getName() << " is killed and skipped\n";
+                }
+            }
+            return possibleFuncPtrList;
+#else
             return phiMap[phi_node];
+#endif
+
 
         } else if (auto arg = dyn_cast<Argument>(value)) {
             assert(argMap.find(arg) != argMap.end());
@@ -202,21 +225,43 @@ struct FuncPtrPass : public ModulePass {
         return false;
     }
 
+    BasicBlock *killedPred{};
+
     bool iterate(Module &module) {
         // TODO: update all phi and function calls
 //        errs() << "Iteration " << numIter << "====================\n";
         bool updated = false;
         for (auto &function: module.getFunctionList()) {
             for (auto &bb : function) {
-                for (auto &inst : bb) {
-//                    errs() << inst << "||||\n";
-                    if (auto callInst = dyn_cast<CallInst>(&inst)) {
-                        updated = processCall(callInst) || updated;
-                    } else if (auto phi = dyn_cast<PHINode>(&inst)) {
-                        updated = processPhi(phi) || updated;
-                    } else if (auto store = dyn_cast<StoreInst>(&inst)) {
-                        updated = processStore(store) || updated;
+                errs() << bb.getName() << "Preds:   ------------------\n";
+                for (auto pred_it = pred_begin(&bb), pred_e = pred_end(&bb);
+                        pred_it != pred_e; ++pred_it) {
+                    BasicBlock *chosen_pred = *pred_it;
+                    auto pred_of_chosen_pred = chosen_pred->getUniquePredecessor();
+                    for (auto pred_it_2 = pred_begin(&bb), pred_e_2 = pred_end(&bb);
+                         pred_it_2 != pred_e_2; ++pred_it_2) {
+                        BasicBlock *killed_pred = *pred_it;
+                        auto pred_of_killed_pred = killed_pred->getUniquePredecessor();
+                        if (pred_of_chosen_pred && pred_of_killed_pred &&
+                                pred_of_chosen_pred == pred_of_killed_pred) {
+                            killedPred = killed_pred;
+                        }
+
+                        for (auto &inst : bb) {
+//                            errs() << inst << "||||\n";
+                            if (auto callInst = dyn_cast<CallInst>(&inst)) {
+                                updated = processCall(callInst) || updated;
+                            } else if (auto phi = dyn_cast<PHINode>(&inst)) {
+                                updated = processPhi(phi) || updated;
+                            } else if (auto store = dyn_cast<StoreInst>(&inst)) {
+                                updated = processStore(store) || updated;
+                            }
+                        }
+
+                        killedPred = nullptr;
                     }
+//                    errs() << pred->getName() << "\n";
+//                    errs() << *pred_head << "\n";
                 }
             }
             updated = processFunction(&function) || updated;
@@ -389,22 +434,27 @@ struct FuncPtrPass : public ModulePass {
 
         for (unsigned i = 0, e = phiNode->getNumIncomingValues();
                 i != e; i++) {
-            auto incomingValue = phiNode->getIncomingValue(i);
+            auto incoming_value = phiNode->getIncomingValue(i);
+            auto incoming_BB = phiNode->getIncomingBlock(i);
+            if (incoming_BB == killedPred) {
+//                errs() << incoming_BB->getName() << " is killed and skipped\n";
+                continue;
+            }
             assert(phiMap.find(phiNode) != phiMap.end());
 
             // add phied values into possible list
 
-            if (!isa<PHINode>(incomingValue) &&
+            if (!isa<PHINode>(incoming_value) &&
                     std::find(possible_list.begin(), possible_list.end(),
-                              incomingValue) == possible_list.end()) {
-                possible_list.push_back(incomingValue);
+                              incoming_value) == possible_list.end()) {
+                possible_list.push_back(incoming_value);
                 updated = true;
 //                    errs() << "Value" << i << "  ------------------\n";
-//                    errs() << *incomingValue << "\n";
+//                    errs() << *incoming_value << "\n";
             }
 
             // add possible list of phied values into possible list
-            updated = unionPossibleList(possible_list, incomingValue) || updated;
+            updated = unionPossibleList(possible_list, incoming_value) || updated;
 
         }
 //        if (updated) {
