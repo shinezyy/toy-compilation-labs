@@ -33,12 +33,15 @@
 #include <llvm/IR/CFG.h>
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/IntrinsicInst.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Bitcode/BitcodeWriterPass.h>
 
 #include <map>
 #include <list>
 #include <algorithm>
 
-#if LLVM_VERSION_MAJOR >= 4
+//#if LLVM_VERSION_MAJOR >= 4
+#if 1
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 
@@ -328,6 +331,7 @@ struct FuncPtrPass : public ModulePass {
             for (auto &bb : function) {
                 for (auto &inst : bb) {
                     unsigned null_count = 0, pointer_count = 0;
+                    Function *unique_func = nullptr;
                     if (auto callInst = dyn_cast<CallInst>(&inst)) {
                         if (isDebugCall(callInst)) {
                             continue;
@@ -364,6 +368,7 @@ struct FuncPtrPass : public ModulePass {
                                 null_count ++;
                                 continue;
                             }
+                            unique_func = func;
                             pointer_count++;
                             if (!first_in_current_line) {
                                 errs() << ", ";
@@ -375,8 +380,9 @@ struct FuncPtrPass : public ModulePass {
                         last_line = current_line;
                         if (null_count == 0 && pointer_count == 1 &&
                                 ! isa<Function>(callInst->getCalledValue())) {
-                            errs() << *callInst << "->";
-                            errs() << "*U";
+                            callInst->setCalledFunction(unique_func);
+//                            errs() << *callInst << "->";
+//                            errs() << "*U";
                         }
                     }
                 }
@@ -644,6 +650,12 @@ int main(int argc, char **argv) {
 
     /// Your pass to print Function and Call Instructions
     Passes.add(new FuncPtrPass());
+
     Passes.run(*M.get());
+
+    std::error_code EC;
+    llvm::raw_fd_ostream OS(InputFilename, EC, llvm::sys::fs::F_None);
+    WriteBitcodeToFile(&(*M), OS);
+    OS.flush();
 }
 
