@@ -138,9 +138,9 @@ struct FuncPtrPass : public ModulePass {
                 auto incoming_BB = phi_node->getIncomingBlock(i);
                 if (incoming_BB != killedPred) {
                     bool updated = unionPossibleList(possibleFuncPtrList, incoming_value);
-                    errs() << incoming_BB->getName() << " is unioned, updated: " << updated << "\n";
+//                    errs() << incoming_BB->getName() << " is unioned, updated: " << updated << "\n";
                 } else {
-                    errs() << incoming_BB->getName() << " is killed and skipped\n";
+//                    errs() << incoming_BB->getName() << " is killed and skipped\n";
                 }
             }
             return possibleFuncPtrList;
@@ -230,11 +230,25 @@ struct FuncPtrPass : public ModulePass {
 
     bool iterate(Module &module) {
         // TODO: update all phi and function calls
-        errs() << "Iteration " << numIter << "====================\n";
+//        errs() << "Iteration " << numIter << "====================\n";
         bool updated = false;
         for (auto &function: module.getFunctionList()) {
+//            errs() << "Iterate Function " << function.getName() << "====================\n";
             for (auto &bb : function) {
+//                errs() << "Iterate BB " << bb.getName() << "====================\n";
 //                errs() << bb.getName() << "Preds:   ------------------\n";
+                if (pred_begin(&bb) == pred_end(&bb)) {
+                    for (auto &inst : bb) {
+//                            errs() << inst << "||||\n";
+                        if (auto callInst = dyn_cast<CallInst>(&inst)) {
+                            updated = processCall(callInst) || updated;
+                        } else if (auto phi = dyn_cast<PHINode>(&inst)) {
+                            updated = processPhi(phi) || updated;
+                        } else if (auto store = dyn_cast<StoreInst>(&inst)) {
+                            updated = processStore(store) || updated;
+                        }
+                    }
+                }
                 for (auto pred_it = pred_begin(&bb), pred_e = pred_end(&bb);
                         pred_it != pred_e; ++pred_it) {
                     BasicBlock *chosen_pred = *pred_it;
@@ -253,7 +267,7 @@ struct FuncPtrPass : public ModulePass {
                                         op1_int->getValue().getLimitedValue() >
                                                 op2_int->getValue().getLimitedValue()) {
                                         if (chosen_pred == br->getSuccessor(1)) {
-                                            errs() << "skipped BB " << chosen_pred->getName() << ", because of dead\n";
+//                                            errs() << "skipped BB " << chosen_pred->getName() << ", because of dead\n";
                                             continue;
                                         }
                                     }
@@ -269,7 +283,7 @@ struct FuncPtrPass : public ModulePass {
                          pred_it_2 != pred_e_2; ++pred_it_2) {
                         BasicBlock *killed_pred = *pred_it_2;
                         if (killed_pred == chosen_pred && !bb.getUniquePredecessor()) {
-                            errs() << "skipped BB " << killed_pred->getName() << ", because of kill\n";
+//                            errs() << "skipped BB " << killed_pred->getName() << ", because of kill\n";
                             continue;
                         }
                         auto pred_of_killed_pred = killed_pred->getUniquePredecessor();
@@ -297,7 +311,7 @@ struct FuncPtrPass : public ModulePass {
             }
 //            updated = processFunction(&function) || updated;
         }
-        errs() << "End Iteration " << numIter++ << "====================\n";
+//        errs() << "End Iteration " << numIter++ << "====================\n";
         return updated;
     }
 
@@ -333,12 +347,12 @@ struct FuncPtrPass : public ModulePass {
                                 PossibleFuncPtrList(1, callInst->getCalledFunction());
                         MDNode *metadata = callInst->getMetadata(0);
                         if (!metadata) {
-                            errs() << "No meta data found for " << *callInst;
+//                            errs() << "No meta data found for " << *callInst;
                             continue;
                         }
                         DILocation *debugLocation = dyn_cast<DILocation>(metadata);
                         if (!debugLocation) {
-                            errs() << "No debug location found for " << *callInst;
+//                            errs() << "No debug location found for " << *callInst;
                             continue;
                         }
                         unsigned current_line = debugLocation->getLine();
@@ -391,16 +405,16 @@ struct FuncPtrPass : public ModulePass {
 
         // TODO: function pointer arg
 
-        errs() << "CallInst:  " << *callInst << " ----------------------\n";
+//        errs() << "CallInst:  " << *callInst << " ----------------------\n";
         for (auto value : possible_func_list) {
 //            errs() << "Called value:" << *value << "\n";
             Function *func = dyn_cast<Function>(value);
             if (!func) {
-                errs() << "null\n";
+//                errs() << "null\n";
                 continue;
             } else {
-                errs() << "Function: " << func->getName() << "   ==============\n";
-                errs() << *callInst << "\n";
+//                errs() << "Function: " << func->getName() << "   ==============\n";
+//                errs() << *callInst << "\n";
             }
             unsigned i = 0;
             for (auto &arg : func->args()) {
@@ -424,9 +438,9 @@ struct FuncPtrPass : public ModulePass {
                     updated = unionPossibleList(argMap[&arg], possibleFuncPtrList) || updated;
                 }
                 PossibleFuncPtrList &possibleList = argMap[&arg];
-                errs() << i << "th Arg: " << arg.getName() << "     --------------\n";
+//                errs() << i << "th Arg: " << arg.getName() << "     --------------\n";
                 for (auto it : possibleList) {
-                    errs() << it->getName() << "||\n";
+//                    errs() << it->getName() << "||\n";
                 }
                 i++;
             }
@@ -470,7 +484,7 @@ struct FuncPtrPass : public ModulePass {
 //            errs() << "Phi Node is not function pointer\n";
             return false;
         }
-        errs() << "Phi: " << *phiNode << " ^^^^^\n";
+//        errs() << "Phi: " << *phiNode << " ^^^^^\n";
 
         bool updated = false;
         PossibleFuncPtrList &possible_list = phiMap[phiNode];
@@ -480,7 +494,7 @@ struct FuncPtrPass : public ModulePass {
             auto incoming_value = phiNode->getIncomingValue(i);
             auto incoming_BB = phiNode->getIncomingBlock(i);
             if (incoming_BB == killedPred) {
-                errs() << incoming_BB->getName() << " is killed and skipped\n";
+//                errs() << incoming_BB->getName() << " is killed and skipped\n";
                 continue;
             }
             assert(phiMap.find(phiNode) != phiMap.end());
@@ -527,6 +541,7 @@ struct FuncPtrPass : public ModulePass {
 
         bool updated = false;
         assert(functionMap.find(function) != functionMap.end());
+//        errs() << "Enter Function: " << function->getName() << "  FFFFFFFFFFFF\n";
         for (auto &bb : *function) {
             for (auto &inst : bb) {
                 if (auto returnInst = dyn_cast<ReturnInst>(&inst)) {
