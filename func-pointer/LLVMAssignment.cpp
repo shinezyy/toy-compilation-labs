@@ -89,6 +89,11 @@ struct FuncPtrPass : public ModulePass {
     std::map<llvm::Function*, PossibleFuncPtrList> functionMap{};
     std::map<llvm::Argument*, PossibleFuncPtrList> argMap{};
 
+    std::map<llvm::CmpInst*, PossibleFuncPtrList> nonNullCmpMap{};
+    std::map<llvm::CmpInst*, bool> constCmpMap{};
+    std::map<llvm::BranchInst*, PossibleFuncPtrList> nonNullBranchMap{};
+    std::map<llvm::BranchInst*, BasicBlock*> impossibleBranch{};
+
     bool unionPossibleList(PossibleFuncPtrList &dst, PossibleFuncPtrList &src) {
         auto updated = false;
         for (auto it: src) {
@@ -118,6 +123,12 @@ struct FuncPtrPass : public ModulePass {
 //            errs() << "Unioning possible list for argument\n";
             updated = unionPossibleList(dst, argMap[arg]) || updated;
         } else if (isa<Function>(value)) {
+            errs() << "Add " << value->getName() << " to possible list\n";
+            if (std::find(dst.begin(), dst.end(), value) == dst.end()) {
+                dst.push_back(value);
+                updated = true;
+            }
+        } else {
             if (std::find(dst.begin(), dst.end(), value) == dst.end()) {
                 dst.push_back(value);
                 updated = true;
@@ -128,16 +139,20 @@ struct FuncPtrPass : public ModulePass {
 
     PossibleFuncPtrList getPossibleList(Value *value) {
         if (CallInst *call_inst = dyn_cast<CallInst>(value)) {
+//            errs() << "get possible list hit in call inst\n";
             assert(callMap.find(call_inst) != callMap.end());
             return callMap[call_inst];
 
         } else if (auto phi_node = dyn_cast<PHINode>(value)) {
+//            errs() << "get possible list hit in phi\n";
             PossibleFuncPtrList possibleFuncPtrList;
             for (unsigned i = 0, e = phi_node->getNumIncomingValues();
                  i != e; i++) {
                 auto incoming_value = phi_node->getIncomingValue(i);
                 auto incoming_BB = phi_node->getIncomingBlock(i);
                 if (incoming_BB != killedPred) {
+//                    errs() << "Incoming Value: ";
+//                    incoming_value->dump();
                     unionPossibleList(possibleFuncPtrList, incoming_value);
                 }
             }
@@ -151,7 +166,7 @@ struct FuncPtrPass : public ModulePass {
             return PossibleFuncPtrList(1, value);
 
         } else {
-            errs() << *value;
+//            errs() << *value;
             assert("Unexpected value type!\n" && false);
         }
     }
@@ -201,26 +216,110 @@ struct FuncPtrPass : public ModulePass {
 
     int numIter{};
 
-    bool processStore(StoreInst *storeInst) {
-//        errs() << "Process Store Inst\n";
-        auto dst = storeInst->getPointerOperand();
-        if (!isFunctionPointer(dst->getType())) {
-            return false;
-        }
+    BasicBlock *killedPred{};
 
-        if (auto dst_arg = dyn_cast<Argument>(dst)) {
-            PossibleFuncPtrList &possibleList = argMap[dst_arg];
-            Value *value = storeInst->getValueOperand();
-            if (std::find(possibleList.begin(), possibleList.end(),
-                          value) == possibleList.end()) {
-                possibleList.push_back(value);
-                return true;
+    bool processConstIntCmp(CmpInst *cmp) {
+        // process const int
+        auto op1 = cmp->getOperand(0);
+        auto op2 = cmp->getOperand(1);
+        auto op1_int = dyn_cast<llvm::ConstantInt>(op1);
+        auto op2_int = dyn_cast<llvm::ConstantInt>(op2);
+        if (!(op1_int && op2_int)) return false;
+
+        auto &v1 = op1_int->getValue();
+        auto &v2 = op2_int->getValue();
+
+        bool res = false;
+        if (cmp->isSigned()) {
+            switch (cmp->getPredicate()) {
+                case CmpInst::ICMP_EQ: res = v1.eq(v2); break;
+                case CmpInst::ICMP_NE: res = v1.ne(v2); break;
+                case CmpInst::ICMP_SGT: res = v1.sgt(v2); break;
+                case CmpInst::ICMP_SGE: res = v1.sge(v2); break;
+                case CmpInst::ICMP_SLT: res = v1.slt(v2); break;
+                case CmpInst::ICMP_SLE: res = v1.sle(v2); break;
+                case CmpInst::ICMP_UGT: res = v1.ugt(v2); break;
+                case CmpInst::ICMP_UGE: res = v1.uge(v2); break;
+                case CmpInst::ICMP_ULT: res = v1.ult(v2); break;
+                case CmpInst::ICMP_ULE: res = v1.ule(v2); break;
+                default:
+                    assert("Unexpected comparison!" && false);
             }
         }
-        return false;
+        constCmpMap[cmp] = res;
+        return true;
     }
 
-    BasicBlock *killedPred{};
+    bool findNullPointer(Value* &op1, Value* &op2) {
+        // if one of them is null, set op1 to null
+
+        if (!(isa<ConstantPointerNull>(op1) ||
+              isa<ConstantPointerNull>(op2))) {
+            return false;
+        }
+        if (isa<ConstantPointerNull>(op1)) {
+            return true;
+        }
+
+        // op2 is null
+        Value *tmp = op1;
+        op1 = op2;
+        op2 = tmp;
+        return true;
+    }
+
+    void processCmp(CmpInst *cmp) {
+        if (processConstIntCmp(cmp)) return;
+
+        if (cmp->getPredicate() != CmpInst::ICMP_NE) return;
+
+        // process NULL pointer
+        auto op1 = cmp->getOperand(0);
+        auto op2 = cmp->getOperand(1);
+
+        if (!findNullPointer(op1, op2)) return;
+
+        if (isa<ConstantPointerNull>(op2)) return;
+
+        unionPossibleList(nonNullCmpMap[cmp], op2);
+    }
+
+    void processBranch(BranchInst *br) {
+        auto *condition = br->getCondition();
+        auto *cmp = dyn_cast<CmpInst>(condition);
+        if (!cmp) return;
+
+        if (constCmpMap.find(cmp) != constCmpMap.end()) {
+            bool cmp_result = constCmpMap[cmp];
+            if (cmp_result) {
+                impossibleBranch[br] = br->getSuccessor(1);
+            } else {
+                impossibleBranch[br] = br->getSuccessor(0);
+            }
+        }
+
+        if (nonNullCmpMap.find(cmp) != nonNullCmpMap.end() &&
+                !nonNullCmpMap[cmp].empty()) {
+            nonNullBranchMap[br] = nonNullCmpMap[cmp];
+            return;
+        }
+    }
+
+    bool isImpossibleBB(BasicBlock *bb) {
+        if (pred_begin(bb) == pred_end(bb)) return false;
+        for (auto pred_it = pred_begin(bb), pred_e = pred_end(bb);
+             pred_it != pred_e; ++pred_it) {
+            BasicBlock *pred = *pred_it;
+            if (!pred) {
+                return false;
+            }
+            auto *br = dyn_cast<BranchInst>(pred->getTerminator());
+            if (!(br && impossibleBranch.find(br) != impossibleBranch.end() &&
+                    impossibleBranch[br] == bb))
+                return false;
+        }
+        return true;
+    }
 
     bool iterate(Module &module) {
         // TODO: update all phi and function calls
@@ -238,8 +337,10 @@ struct FuncPtrPass : public ModulePass {
                             updated = processCall(callInst) || updated;
                         } else if (auto phi = dyn_cast<PHINode>(&inst)) {
                             updated = processPhi(phi) || updated;
-                        } else if (auto store = dyn_cast<StoreInst>(&inst)) {
-                            updated = processStore(store) || updated;
+                        } else if (auto cmp = dyn_cast<CmpInst>(&inst)) {
+                            processCmp(cmp);
+                        } else if (auto br = dyn_cast<BranchInst>(&inst)) {
+                            processBranch(br);
                         }
                     }
                 }
@@ -289,8 +390,10 @@ struct FuncPtrPass : public ModulePass {
                                 updated = processCall(callInst) || updated;
                             } else if (auto phi = dyn_cast<PHINode>(&inst)) {
                                 updated = processPhi(phi) || updated;
-                            } else if (auto store = dyn_cast<StoreInst>(&inst)) {
-                                updated = processStore(store) || updated;
+                            } else if (auto cmp = dyn_cast<CmpInst>(&inst)) {
+                                processCmp(cmp);
+                            } else if (auto br = dyn_cast<BranchInst>(&inst)) {
+                                processBranch(br);
                             }
                         }
 
@@ -362,6 +465,7 @@ struct FuncPtrPass : public ModulePass {
                             auto func = dyn_cast<Function>(value);
 //                            assert(func);
                             if (!func|| func->getName() == "") {
+                                errs() << "null!";
                                 null_count ++;
                                 continue;
                             }
@@ -378,8 +482,8 @@ struct FuncPtrPass : public ModulePass {
                         if (null_count == 0 && pointer_count == 1 &&
                                 ! isa<Function>(callInst->getCalledValue())) {
                             callInst->setCalledFunction(unique_func);
-//                            errs()  << "    ---- Replace " << calledValue->getName() << " with "
-//                                    << unique_func->getName();
+                            errs()  << "    ---- Replace " << calledValue->getName() << " with "
+                                    << unique_func->getName();
 //                            errs() << "*U";
                         }
                     }
@@ -401,6 +505,8 @@ struct FuncPtrPass : public ModulePass {
 
         bool isCallingValue = calledValue != nullptr;
 
+//        errs() << "Call Inst: ";
+//        callInst->dump();
         // TODO: function pointer consumption
         std::list<Value *> &&possible_func_list =
                 isCallingValue ? std::move(getPossibleList(calledValue)) :
@@ -410,10 +516,10 @@ struct FuncPtrPass : public ModulePass {
 
 //        errs() << "CallInst:  " << *callInst << " ----------------------\n";
         for (auto value : possible_func_list) {
-//            errs() << "Called value:" << *value << "\n";
+//            errs() << "Called value: " << value->getName() << "\n";
             Function *func = dyn_cast<Function>(value);
             if (!func) {
-//                errs() << "null\n";
+//                errs() << "null skipped!\n";
                 continue;
             } else {
 //                errs() << "Function: " << func->getName() << "   ==============\n";
@@ -464,20 +570,6 @@ struct FuncPtrPass : public ModulePass {
         }
 
         return updated;
-
-
-#ifdef NEVER_DEFINED
-        errs() << "CallInst:" << *callInst << " ----------------------\n";
-        for (auto value : possible_func_list) {
-            Function *func = dyn_cast<Function>(value);
-            assert(func);
-            if (func->getName() == "") {
-                errs() << "null\n";
-            } else {
-                errs() << func->getName() << "\n";
-            }
-        }
-#endif
     }
 
     bool processPhi(PHINode *phiNode) {
@@ -571,6 +663,8 @@ struct FuncPtrPass : public ModulePass {
 
         while (iterate(module));
 
+        errs() << "------------------------------\n";
+
         printCalls(module);
 
 //        printMaps();
@@ -651,9 +745,9 @@ int main(int argc, char **argv) {
 
     Passes.run(*M.get());
 
-    std::error_code EC;
-    llvm::raw_fd_ostream OS(InputFilename, EC, llvm::sys::fs::F_None);
-    WriteBitcodeToFile(&(*M), OS);
-    OS.flush();
+//    std::error_code EC;
+//    llvm::raw_fd_ostream OS(InputFilename, EC, llvm::sys::fs::F_None);
+//    WriteBitcodeToFile(&(*M), OS);
+//    OS.flush();
 }
 
