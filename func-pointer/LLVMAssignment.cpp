@@ -378,8 +378,8 @@ struct FuncPtrPass : public ModulePass {
                         if (null_count == 0 && pointer_count == 1 &&
                                 ! isa<Function>(callInst->getCalledValue())) {
                             callInst->setCalledFunction(unique_func);
-                            errs()  << "    ---- Replace " << calledValue->getName() << " with "
-                                    << unique_func->getName();
+//                            errs()  << "    ---- Replace " << calledValue->getName() << " with "
+//                                    << unique_func->getName();
 //                            errs() << "*U";
                         }
                     }
