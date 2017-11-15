@@ -123,7 +123,7 @@ struct FuncPtrPass : public ModulePass {
 //            errs() << "Unioning possible list for argument\n";
             updated = unionPossibleList(dst, argMap[arg]) || updated;
         } else if (isa<Function>(value)) {
-            errs() << "Add " << value->getName() << " to possible list\n";
+//            errs() << "Add " << value->getName() << " to possible list\n";
             if (std::find(dst.begin(), dst.end(), value) == dst.end()) {
                 dst.push_back(value);
                 updated = true;
@@ -137,7 +137,7 @@ struct FuncPtrPass : public ModulePass {
         return updated;
     }
 
-    PossibleFuncPtrList getPossibleList(Value *value) {
+    PossibleFuncPtrList getPossibleList(Value *value, BasicBlock *useSite=nullptr) {
         if (CallInst *call_inst = dyn_cast<CallInst>(value)) {
 //            errs() << "get possible list hit in call inst\n";
             assert(callMap.find(call_inst) != callMap.end());
@@ -150,19 +150,55 @@ struct FuncPtrPass : public ModulePass {
                  i != e; i++) {
                 auto incoming_value = phi_node->getIncomingValue(i);
                 auto incoming_BB = phi_node->getIncomingBlock(i);
+                auto br = getPredBranch(incoming_BB);
+                if (impossibleBranch.find(br) != impossibleBranch.end()) {
+                    if (impossibleBranch[br] == incoming_BB) {
+                        continue;
+                    }
+                }
                 if (incoming_BB != killedPred) {
 //                    errs() << "Incoming Value: ";
 //                    incoming_value->dump();
                     unionPossibleList(possibleFuncPtrList, incoming_value);
                 }
+                if (!useSite) {
+                    continue;
+                }
+//                errs() << "BB name:" << useSite->getName() << "\n";
+                if (BranchInst *br = getPredBranch(useSite)) {
+                    if (nonNullBranchMap.find(br) != nonNullBranchMap.end()) {
+                        for (auto &it : nonNullBranchMap[br]) {
+//                            errs() << "reach 4!\n";
+                            if (it == value) {
+//                                errs() << "reach 5!\n";
+                                auto ptr_it = possibleFuncPtrList.begin();
+                                while (ptr_it != possibleFuncPtrList.end()) {
+//                                    errs() << "reach 6!\n";
+                                    if ((*ptr_it)->getName() == "") {
+//                                        errs() << "reach 7!\n";
+//                                        errs() << "erase null: " << (*ptr_it)->getName() << "\n";
+                                        ptr_it = possibleFuncPtrList.erase(ptr_it);
+                                    } else {
+                                        ptr_it++;
+                                    }
+                                }
+                            } else {
+//                                errs() << "it: " << it->getName() << " | value: "
+//                                       << value->getName() << "\n";
+                            }
+                        }
+                    }
+                }
             }
             return possibleFuncPtrList;
 
         } else if (auto arg = dyn_cast<Argument>(value)) {
+//            errs() << "get possible list hit in arg\n";
             assert(argMap.find(arg) != argMap.end());
             return argMap[arg];
 
         } else if (isa<Function>(value)) {
+//            errs() << "get possible list hit in func\n";
             return PossibleFuncPtrList(1, value);
 
         } else {
@@ -247,6 +283,7 @@ struct FuncPtrPass : public ModulePass {
             }
         }
         constCmpMap[cmp] = res;
+//        errs() << "found const cmp: " << cmp->getName() << "\n";
         return true;
     }
 
@@ -281,21 +318,25 @@ struct FuncPtrPass : public ModulePass {
 
         if (isa<ConstantPointerNull>(op2)) return;
 
-        unionPossibleList(nonNullCmpMap[cmp], op2);
+        PossibleFuncPtrList funcPtrList(1, op2);
+        unionPossibleList(nonNullCmpMap[cmp], funcPtrList);
     }
 
     void processBranch(BranchInst *br) {
+        if (!br->isConditional()) return;
         auto *condition = br->getCondition();
         auto *cmp = dyn_cast<CmpInst>(condition);
         if (!cmp) return;
 
         if (constCmpMap.find(cmp) != constCmpMap.end()) {
             bool cmp_result = constCmpMap[cmp];
+//            errs() << *br << " inherent from " << cmp->getName() << "\n";
             if (cmp_result) {
                 impossibleBranch[br] = br->getSuccessor(1);
             } else {
                 impossibleBranch[br] = br->getSuccessor(0);
             }
+//            errs() << impossibleBranch[br]->getName() << "set impossible!\n";
         }
 
         if (nonNullCmpMap.find(cmp) != nonNullCmpMap.end() &&
@@ -306,19 +347,34 @@ struct FuncPtrPass : public ModulePass {
     }
 
     bool isImpossibleBB(BasicBlock *bb) {
-        if (pred_begin(bb) == pred_end(bb)) return false;
+        if (pred_begin(bb) == pred_end(bb)) {
+//            errs() << bb->getName() << "Possible 1\n";
+            return false;
+        }
         for (auto pred_it = pred_begin(bb), pred_e = pred_end(bb);
              pred_it != pred_e; ++pred_it) {
             BasicBlock *pred = *pred_it;
             if (!pred) {
+//                errs() << bb->getName() << "Possible 2\n";
                 return false;
             }
             auto *br = dyn_cast<BranchInst>(pred->getTerminator());
             if (!(br && impossibleBranch.find(br) != impossibleBranch.end() &&
-                    impossibleBranch[br] == bb))
+                    impossibleBranch[br] == bb)) {
+//                errs() << bb->getName() << "Possible 3\n";
                 return false;
+            }
         }
+//        errs() << bb->getName() << " is impossible\n";
         return true;
+    }
+
+    BranchInst *getPredBranch(BasicBlock *bb) {
+        auto *pred = bb->getUniquePredecessor();
+        if (!pred) return nullptr;
+//        errs() << "reach getPredBranch!\n";
+
+        return dyn_cast<BranchInst>(pred->getTerminator());
     }
 
     bool iterate(Module &module) {
@@ -328,8 +384,8 @@ struct FuncPtrPass : public ModulePass {
         for (auto &function: module.getFunctionList()) {
 //            errs() << "Iterate Function " << function.getName() << "====================\n";
             for (auto &bb : function) {
+                if (isImpossibleBB(&bb)) continue;
 //                errs() << "Iterate BB " << bb.getName() << "====================\n";
-//                errs() << bb.getName() << "Preds:   ------------------\n";
                 if (pred_begin(&bb) == pred_end(&bb)) {
                     for (auto &inst : bb) {
 //                            errs() << inst << "||||\n";
@@ -344,32 +400,11 @@ struct FuncPtrPass : public ModulePass {
                         }
                     }
                 }
+
                 for (auto pred_it = pred_begin(&bb), pred_e = pred_end(&bb);
                         pred_it != pred_e; ++pred_it) {
                     BasicBlock *chosen_pred = *pred_it;
                     auto pred_of_chosen_pred = chosen_pred->getUniquePredecessor();
-
-                    if (pred_of_chosen_pred) {
-                        TerminatorInst *br = pred_of_chosen_pred->getTerminator();
-                        if (CmpInst *cmp = dyn_cast<CmpInst>(br->getPrevNode())) {
-                            if(br->getOperand(0) == cmp) {
-                                auto op1 = cmp->getOperand(0);
-                                auto op2 = cmp->getOperand(1);
-                                llvm::ConstantInt *op1_int = dyn_cast<llvm::ConstantInt>(op1);
-                                llvm::ConstantInt *op2_int = dyn_cast<llvm::ConstantInt>(op2);
-                                if (op1_int && op2_int) {
-                                    if (cmp->getPredicate() == CmpInst::Predicate::ICMP_SGT &&
-                                        op1_int->getValue().getLimitedValue() >
-                                                op2_int->getValue().getLimitedValue()) {
-                                        if (chosen_pred == br->getSuccessor(1)) {
-//                                            errs() << "skipped BB " << chosen_pred->getName() << ", because of dead\n";
-                                            continue;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     for (auto pred_it_2 = pred_begin(&bb), pred_e_2 = pred_end(&bb);
                          pred_it_2 != pred_e_2; ++pred_it_2) {
@@ -399,8 +434,6 @@ struct FuncPtrPass : public ModulePass {
 
                         killedPred = nullptr;
                     }
-//                    errs() << pred->getName() << "\n";
-//                    errs() << *pred_head << "\n";
                 }
             }
 //            updated = processFunction(&function) || updated;
@@ -439,7 +472,7 @@ struct FuncPtrPass : public ModulePass {
                         auto calledValue = callInst->getCalledValue();
                         bool isCallingValue = calledValue != nullptr;
                         std::list<Value *> &&possible_func_list =
-                                isCallingValue ? std::move(getPossibleList(calledValue)) :
+                                isCallingValue ? std::move(getPossibleList(calledValue, callInst->getParent())) :
                                 PossibleFuncPtrList(1, callInst->getCalledFunction());
                         MDNode *metadata = callInst->getMetadata(0);
                         if (!metadata) {
@@ -465,7 +498,7 @@ struct FuncPtrPass : public ModulePass {
                             auto func = dyn_cast<Function>(value);
 //                            assert(func);
                             if (!func|| func->getName() == "") {
-                                errs() << "null!";
+//                                errs() << "null!";
                                 null_count ++;
                                 continue;
                             }
@@ -482,8 +515,8 @@ struct FuncPtrPass : public ModulePass {
                         if (null_count == 0 && pointer_count == 1 &&
                                 ! isa<Function>(callInst->getCalledValue())) {
                             callInst->setCalledFunction(unique_func);
-                            errs()  << "    ---- Replace " << calledValue->getName() << " with "
-                                    << unique_func->getName();
+//                            errs()  << "    ---- Replace " << calledValue->getName() << " with "
+//                                    << unique_func->getName();
 //                            errs() << "*U";
                         }
                     }
@@ -509,7 +542,7 @@ struct FuncPtrPass : public ModulePass {
 //        callInst->dump();
         // TODO: function pointer consumption
         std::list<Value *> &&possible_func_list =
-                isCallingValue ? std::move(getPossibleList(calledValue)) :
+                isCallingValue ? std::move(getPossibleList(calledValue, callInst->getParent())) :
                 PossibleFuncPtrList(1, callInst->getCalledFunction());
 
         // TODO: function pointer arg
@@ -543,6 +576,7 @@ struct FuncPtrPass : public ModulePass {
                     }
 
                 } else {
+//                    errs() << "binding argument for " << arg.getName() << "\n";
                     PossibleFuncPtrList possibleFuncPtrList = getPossibleList(arg_in);
                     updated = unionPossibleList(argMap[&arg], possibleFuncPtrList) || updated;
                 }
@@ -663,7 +697,7 @@ struct FuncPtrPass : public ModulePass {
 
         while (iterate(module));
 
-        errs() << "------------------------------\n";
+//        errs() << "------------------------------\n";
 
         printCalls(module);
 
@@ -745,9 +779,9 @@ int main(int argc, char **argv) {
 
     Passes.run(*M.get());
 
-//    std::error_code EC;
-//    llvm::raw_fd_ostream OS(InputFilename, EC, llvm::sys::fs::F_None);
-//    WriteBitcodeToFile(&(*M), OS);
-//    OS.flush();
+    std::error_code EC;
+    llvm::raw_fd_ostream OS(InputFilename, EC, llvm::sys::fs::F_None);
+    WriteBitcodeToFile(&(*M), OS);
+    OS.flush();
 }
 
