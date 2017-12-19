@@ -25,9 +25,11 @@ file(GLOB project_include
 set(SOURCE_FILES
         ${project_include}
 
-        func-pointer/LLVMAssignment.cpp
-        func-pointer/log.cpp
-        func-pointer/log.h
+        data-flow-analysis/Dataflow.h
+        data-flow-analysis/Liveness.h
+        data-flow-analysis/LLVMAssignment.cpp
+        data-flow-analysis/log.cpp
+        data-flow-analysis/log.h
         )
 
 include_directories(func-pointer)
