@@ -4,6 +4,5 @@ ast-interpreter/.cproject
 ast-interpreter/.project
 ast-interpreter/CMakeLists.txt
 include/
-llvm-include/
-
 llvm-include
+test-util/test_path.txt
