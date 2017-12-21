@@ -19,6 +19,7 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Support/ToolOutputFile.h>
 
+#define LLVM_VERSION_MAJOR 5
 #if LLVM_VERSION_MAJOR >= 4
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
@@ -29,10 +30,8 @@
 
 #include <llvm/Transforms/Scalar.h>
 
-#include "Liveness.h"
-#include "llvm/IR/Function.h"
-#include "llvm/Pass.h"
-#include "llvm/Support/raw_ostream.h"
+#include "FuncPointerDataFlow.h"
+
 using namespace llvm;
 #if LLVM_VERSION_MAJOR >= 4
 static ManagedStatic<LLVMContext> GlobalContext;
@@ -58,27 +57,11 @@ struct EnableFunctionOptPass : public FunctionPass {
 char EnableFunctionOptPass::ID = 0;
 #endif
 
-///!TODO TO BE COMPLETED BY YOU FOR ASSIGNMENT 3
-struct FuncPtrPass : public ModulePass {
-    static char ID; // Pass identification, replacement for typeid
-    FuncPtrPass() : ModulePass(ID) {}
 
-
-    bool runOnModule(Module &M) override {
-        errs() << "Hello: ";
-        errs().write_escaped(M.getName()) << '\n';
-        M.dump();
-        errs() << "------------------------------\n";
-        return false;
-    }
-};
-
-
-char FuncPtrPass::ID = 0;
 static RegisterPass<FuncPtrPass> X("funcptrpass", "Print function call instruction");
 
-char Liveness::ID = 0;
-static RegisterPass<Liveness> Y("liveness", "Liveness Dataflow Analysis");
+//char Liveness::ID = 0;
+//static RegisterPass<Liveness> Y("liveness", "Liveness Dataflow Analysis");
 
 static cl::opt<std::string>
 InputFilename(cl::Positional,

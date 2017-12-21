@@ -30,9 +30,11 @@ set(SOURCE_FILES
         data-flow-analysis/LLVMAssignment.cpp
         data-flow-analysis/log.cpp
         data-flow-analysis/log.h
+        data-flow-analysis/FuncPointerDataFlow.cpp
+        data-flow-analysis/FuncPointerDataFlow.h
         )
 
-include_directories(func-pointer)
+include_directories(data-flow-analysis)
 include_directories(llvm-include)
 
 add_executable(clang_devel_clion ${SOURCE_FILES})

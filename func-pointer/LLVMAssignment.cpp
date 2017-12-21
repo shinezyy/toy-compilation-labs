@@ -741,7 +741,6 @@ struct FuncPtrPass : public ModulePass {
 };
 
 
-char FuncPtrPass::ID = 0;
 static RegisterPass<FuncPtrPass> X("funcptrpass", "Print function call instruction");
 
 static cl::opt<std::string>
