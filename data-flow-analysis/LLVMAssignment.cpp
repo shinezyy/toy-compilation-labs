@@ -60,7 +60,6 @@ char EnableFunctionOptPass::ID = 0;
 
 static RegisterPass<FuncPtrPass> X("funcptrpass", "Print function call instruction");
 
-//char Liveness::ID = 0;
 //static RegisterPass<Liveness> Y("liveness", "Liveness Dataflow Analysis");
 
 static cl::opt<std::string>

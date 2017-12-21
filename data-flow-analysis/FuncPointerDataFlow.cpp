@@ -8,6 +8,7 @@
 
 #include "FuncPointerDataFlow.h"
 
+char FuncPtrPass::ID = 0;
 
 bool FuncPtrPass::runOnModule(Module &M)
 {
@@ -45,6 +46,7 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
     if (auto casted = dyn_cast<GetElementPtrInst>(&inst)) {
         return visitGetElementPtr(casted);
     }
+    return false;
 }
 
 bool FuncPtrPass::visitPhiNode(PHINode *phiNode)

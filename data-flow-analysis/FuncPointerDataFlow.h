@@ -38,6 +38,5 @@ public:
     bool visitGetElementPtr(GetElementPtrInst* getElementPtrInst);
 };
 
-char FuncPtrPass::ID = 0;
 
 #endif //CLANG_DEVEL_CLION_FUNCPOINTERDATAFLOW_H

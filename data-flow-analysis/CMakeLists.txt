@@ -9,6 +9,7 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_tool(dataflow
         LLVMAssignment.cpp
+        FuncPointerDataFlow.cpp
         log.cpp
   )
 
