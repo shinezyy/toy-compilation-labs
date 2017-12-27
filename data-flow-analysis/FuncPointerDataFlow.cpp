@@ -54,7 +54,18 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
 
 bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
 {
-    return false;
+    if (!isFunctionPointer(phiNode->getType())) {
+        return false;
+    }
+    auto updated = false;
+    checkInit(phiNode);
+    for (unsigned incoming_index = 0, e = phiNode->getNumIncomingValues();
+            incoming_index != e; incoming_index++) {
+        updated |= setUnion(
+                ptrSetMap[phiNode],
+                ptrSetMap[phiNode->getIncomingValue(incoming_index)]);
+    }
+    return updated;
 }
 
 bool FuncPtrPass::visitCall(CallInst *callInst)
