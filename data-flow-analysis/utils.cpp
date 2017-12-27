@@ -14,7 +14,7 @@ bool FuncPtrPass::isFunctionPointer(Type *type)
 
 FuncPtrPass::PossibleFuncPtrSet FuncPtrPass::wrappedPtrSet(Value *value)
 {
-    if (auto func = dyn_cast<Function>(value)) {
+    if (isa<Function>(value)) {
         PossibleFuncPtrSet possibleFuncPtrSet;
         possibleFuncPtrSet.insert(value);
         return possibleFuncPtrSet;

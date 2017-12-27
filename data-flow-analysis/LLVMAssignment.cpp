@@ -94,8 +94,8 @@ int main(int argc, char **argv) {
    //Passes.add(new Liveness());
    Passes.add(new FuncPtrPass());
    Passes.run(*M.get());
-#ifndef NDEBUG
-   system("pause");
-#endif
+//#ifndef NDEBUG
+//   system("pause");
+//#endif
 }
 

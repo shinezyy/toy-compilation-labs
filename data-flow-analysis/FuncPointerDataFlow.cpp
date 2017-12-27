@@ -15,7 +15,10 @@ char FuncPtrPass::ID = 0;
 bool FuncPtrPass::runOnModule(Module &M)
 {
     errs().write_escaped(M.getName()) << '\n';
-    iterate(M);
+
+    while(iterate(M));
+
+    printCalls(M);
     return false;
 }
 
@@ -73,6 +76,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     if (isa<DbgValueInst>(callInst)) {
         return false;
     }
+    checkInit(callInst);
     bool updated = false;
     auto called_value = callInst->getCalledValue();
     PossibleFuncPtrSet possible_func_ptr_set;
@@ -89,6 +93,9 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             log(DEBUG, FuncVisit, "null ptr skipped");
             continue;
         }
+        checkInit(func);
+        // 把绑定到函数（返回值）上的指针集合并入
+        updated |= setUnion(ptrSetMap[called_value], ptrSetMap[func]);
 
         // 把所有函数指针绑定到参数上去
         unsigned arg_index = 0;

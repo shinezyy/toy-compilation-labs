@@ -22,7 +22,7 @@ public:
     FuncPtrPass() : ModulePass(ID) {}
 
     typedef std::set<Value*> PossibleFuncPtrSet;
-    std::map<Value*, PossibleFuncPtrSet> ptrSetMap;
+    std::map<Value*, PossibleFuncPtrSet> ptrSetMap{};
 
     bool runOnModule(Module &M) override;
 
@@ -49,6 +49,10 @@ public:
     void checkInit(Value *value);
 
     bool setUnion(PossibleFuncPtrSet &dst, const PossibleFuncPtrSet &src);
+
+    // 输出相关
+
+    void printCalls(Module &M);
 };
 
 
