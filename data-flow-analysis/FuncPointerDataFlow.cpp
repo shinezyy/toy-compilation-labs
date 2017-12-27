@@ -7,6 +7,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/CFG.h>
 
 #include "FuncPointerDataFlow.h"
 #include "log.h"
@@ -25,23 +26,73 @@ bool FuncPtrPass::runOnModule(Module &M)
 
 bool FuncPtrPass::iterate(Module &module)
 {
-    bool updated = false;
+    bool updated = true;
     if (DEBUG_ALL) {
         for (unsigned i = 0; i < 80; i++) {
             errs() << '=';
         }
         errs() << '\n';
     }
+
+    Env oldArgsEnv = argsEnv;
+
     for (auto &function: module.getFunctionList()) {
-        if (function.getBasicBlockList().size() == 0) continue;
+        if (function.getBasicBlockList().empty()) continue;
+
         log(DEBUG, FuncVisit, "visit function %s", nameOf(&function));
-        for (auto &bb: function) {
-            for (auto &inst: bb) {
-                updated |= dispatchInst(inst);
+
+        // Passing args
+
+        updated = true;
+        while (updated) {
+            updated = false;
+
+            for (auto &bb: function) {
+                log(DEBUG, FuncVisit, "visit bb %s", bb.getName().str().c_str());
+                Env in, out;
+
+                if (&bb == &function.getEntryBlock()) {  // pass arguments to entry block.
+                    in = argsEnv;
+                }
+                else {
+                    log(DEBUG, FuncVisit, "meet");
+                    in = meet(&bb);
+                }
+
+                log(DEBUG, FuncVisit, "in");
+                printEnv(in);
+
+                out = in;
+
+                _currEnv = &out;
+                for (auto &inst: bb) {
+                    dispatchInst(inst);
+                }
+
+                log(DEBUG, FuncVisit, "out");
+                printEnv(out);
+                if (out != envs[&bb]) {
+                    envs[&bb] = out;
+                    log(DEBUG, FuncVisit, "updated");
+                    updated = true;
+                }
             }
         }
     }
-    return updated;
+
+    // Functions only care args changes.
+    return argsEnv != oldArgsEnv;
+}
+
+FuncPtrPass::Env FuncPtrPass::meet(BasicBlock *bb) {
+    Env in;
+    for (auto *p : predecessors(bb)) {
+        for (auto pair : envs[p]) {
+            log(DEBUG, FuncVisit, "merge %s", nameOf(pair.first));
+            setUnion(in[pair.first], pair.second);
+        }
+    }
+    return in;
 }
 
 bool FuncPtrPass::dispatchInst(Instruction &inst)
@@ -80,13 +131,16 @@ bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
     }
     auto updated = false;
     checkInit(phiNode);
-    for (unsigned incoming_index = 0, e = phiNode->getNumIncomingValues();
-            incoming_index != e; incoming_index++) {
-        updated |= setUnion(
-                ptrSetMap[phiNode],
-                wrappedPtrSet(phiNode->getIncomingValue(incoming_index)));
+    for (unsigned incoming_index = 0, e = phiNode->getNumIncomingValues(); incoming_index != e; incoming_index++) {
+        Value *inVal = phiNode->getIncomingValue(incoming_index);
+        if (dyn_cast<Function>(inVal)) {
+            setUnion(currEnv[phiNode], wrappedPtrSet(inVal));
+        }
+        else {
+            setUnion(currEnv[phiNode], currEnv[inVal]);
+        }
     }
-    log(DEBUG, PhiVisit, "length of merged set: %lu", ptrSetMap[phiNode].size());
+    log(DEBUG, PhiVisit, "length of merged %s: %lu", nameOf(phiNode), currEnv[phiNode].size());
     return updated;
 }
 
@@ -95,27 +149,31 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     if (isLLVMBuiltIn(callInst)) {
         return false;
     }
+
     checkInit(callInst);
+
     bool updated = false;
+
     PossibleFuncPtrSet possible_func_ptr_set;
+
     // 让直接调用和间接调用的处理代码一致，所以把它包在一个set里面
-    if (auto func = callInst->getCalledFunction()) {
-        possible_func_ptr_set.insert(func);
+    if (auto *func = callInst->getCalledFunction()) {
+        possible_func_ptr_set.insert(callInst->getCalledFunction());
         // Handle malloc
         if (func->getName() == "malloc") {
             checkInit(callInst);
-            if (ptrSetMap[callInst].size() == 0) {
+            if (currEnv[callInst].empty()) {
                 log(DEBUG, FuncVisit, "malloc");
                 Value *p = createAllocValue(callInst);
                 checkInit(p);
-                ptrSetMap[callInst].insert(p);
+                currEnv[callInst].insert(p);
                 printSet(callInst);
                 updated = true;
             }
         }
     } else {
         auto called_value = callInst->getCalledValue();
-        possible_func_ptr_set = ptrSetMap[called_value];
+        possible_func_ptr_set = currEnv[called_value];
     }
     log(DEBUG, FuncVisit, "Size of func ptr set: %lu", possible_func_ptr_set.size());
 
@@ -126,10 +184,13 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             continue;
         }
         checkInit(func);
+
         // 把绑定到函数（返回值）上的指针集合并入call Inst
-        auto updated_call_inst = setUnion(ptrSetMap[callInst], ptrSetMap[func]);
-        log(DEBUG, FuncVisit, "update call inst: %i", updated_call_inst);
-        updated |= updated_call_inst;
+        if (callInst->getType()->isPointerTy()) {
+            auto updated_call_inst = setUnion(currEnv[callInst], currEnv[func]);
+            log(DEBUG, FuncVisit, "update call inst: %i", updated_call_inst);
+            updated |= updated_call_inst;
+        }
 
         // 把所有函数指针绑定到参数上去
         unsigned arg_index = 0;
@@ -144,7 +205,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             checkInit(&parameter);
 
             auto arg = callInst->getOperand(arg_index);
-            PossibleFuncPtrSet &dst = ptrSetMap[&parameter];
+            PossibleFuncPtrSet &dst = argsEnv[&parameter];
             // 考虑arg是函数的情况,wrap一下
             auto updated_parameters = setUnion(dst, wrappedPtrSet(arg));
             log(DEBUG, FuncVisit, "update parameters: %i", updated_parameters);
@@ -156,18 +217,25 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
 
 Value *FuncPtrPass::createAllocValue(Instruction *alloc) {
     static int count = 0;
-    char name[20];
-    sprintf(name, "S%d", ++count);
-    return new AllocaInst(IntegerType::get(alloc->getModule()->getContext(), 32), 10, name);
+    if (allocated.count(alloc)) {
+        return allocated[alloc];
+    }
+    else {
+        char name[20];
+        sprintf(name, "S%d", ++count);
+        Value *v = new AllocaInst(IntegerType::get(alloc->getModule()->getContext(), 32), 10, name);
+        allocated[alloc] = v;
+        return v;
+    }
 }
 
 bool FuncPtrPass::visitAlloc(AllocaInst *allocaInst)
 {
     log(DEBUG, FuncVisit, "alloc for %s", nameOf(allocaInst));
-    if (ptrSetMap.count(allocaInst) == 0) {
+    if (currEnv.count(allocaInst) == 0) {
         Value *p = createAllocValue(allocaInst);
-        ptrSetMap[p];
-        ptrSetMap[allocaInst].insert(p);
+        currEnv[p];
+        currEnv[allocaInst].insert(p);
         printSet(allocaInst);
         return true;
     }
@@ -183,7 +251,7 @@ bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
     Value *ptr = getElementPtrInst->getOperand(0);
     log(DEBUG, FuncVisit, "get elem of %s", nameOf(ptr));
     log(DEBUG, FuncVisit, "to %s", nameOf(getElementPtrInst));
-    updated = setUnion(ptrSetMap[getElementPtrInst], ptrSetMap[ptr]) || updated;
+    updated = setUnion(currEnv[getElementPtrInst], currEnv[ptr]) || updated;
     printSet(getElementPtrInst);
     return updated;
 }
@@ -193,9 +261,9 @@ bool FuncPtrPass::visitLoad(LoadInst *loadInst) {
     Value *src = loadInst->getOperand(0);
     log(DEBUG, FuncVisit, "load from %s", nameOf(src));
     log(DEBUG, FuncVisit, "to %d", loadInst->getValueID());
-    for (auto p : ptrSetMap[src]) {
+    for (auto p : currEnv[src]) {
         log(DEBUG, FuncVisit, "merge");
-        updated = setUnion(ptrSetMap[loadInst], ptrSetMap[p]) || updated;
+        updated = setUnion(currEnv[loadInst], currEnv[p]) || updated;
         printSet(loadInst);
     }
     return updated;
@@ -209,9 +277,9 @@ bool FuncPtrPass::visitStore(StoreInst *storeInst) {
     Value *dst = storeInst->getOperand(1);
     log(DEBUG, FuncVisit, "store dst: %s", nameOf(dst));
     printSet(dst);
-    for (auto p : ptrSetMap[dst]) {
+    for (auto p : currEnv[dst]) {
         log(DEBUG, FuncVisit, "merge");
-        updated = setUnion(ptrSetMap[p], wrappedPtrSet(src)) || updated;
+        updated = setUnion(currEnv[p], wrappedPtrSet(src)) || updated;
         printSet(p);
     }
 
@@ -228,11 +296,11 @@ bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
     Function *func = returnInst->getParent()->getParent();
     checkInit(value);
     checkInit(func);
-    return setUnion(ptrSetMap[func], wrappedPtrSet(value));
+    return setUnion(currEnv[func], wrappedPtrSet(value));
 }
 
 bool FuncPtrPass::visitBitcast(BitCastInst *bitCastInst) {
     Value *ope = bitCastInst->getOperand(0);
     log(DEBUG, FuncVisit, "bit cast %s", nameOf(ope));
-    return setUnion(ptrSetMap[bitCastInst], ptrSetMap[ope]);
+    return setUnion(currEnv[bitCastInst], currEnv[ope]);
 }

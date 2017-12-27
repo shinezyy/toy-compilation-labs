@@ -23,15 +23,13 @@ FuncPtrPass::PossibleFuncPtrSet FuncPtrPass::wrappedPtrSet(Value *value)
         possibleFuncPtrSet.insert(value);
         return possibleFuncPtrSet;
     } else {
-        return ptrSetMap[value];
+        return currEnv[value];
     }
 }
 
 void FuncPtrPass::checkInit(Value *value)
 {
-    if (!ptrSetMap.count(value)) {
-        ptrSetMap[value];
-    }
+    return;
 }
 
 bool FuncPtrPass::setUnion(FuncPtrPass::PossibleFuncPtrSet &dst,
@@ -61,7 +59,30 @@ void FuncPtrPass::printSet(Value *v) {
         std::stringstream ss;
         std::string sep = "";
         ss << "{ ";
-        for (auto p : ptrSetMap[v]) {
+        for (auto p : currEnv[v]) {
+            ss << sep << p->getName().str();
+            sep = ", ";
+        }
+        ss << " }\n";
+        llvm::errs() << ss.str();
+    }
+}
+
+void FuncPtrPass::printEnv(FuncPtrPass::Env &env) {
+    for (auto &pair : env) {
+        Value *key = pair.first;
+        PossibleFuncPtrSet &set = pair.second;
+        if (key->getName() == "") {
+            llvm::errs() << key->getValueID() << ": ";
+        }
+        else {
+            llvm::errs() << key->getName() << ": ";
+        }
+
+        std::stringstream ss;
+        std::string sep;
+        ss << "{ ";
+        for (auto p : set) {
             ss << sep << p->getName().str();
             sep = ", ";
         }

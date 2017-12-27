@@ -22,11 +22,18 @@ public:
     FuncPtrPass() : ModulePass(ID) {}
 
     typedef std::set<Value*> PossibleFuncPtrSet;
-    std::map<Value*, PossibleFuncPtrSet> ptrSetMap{};
+    typedef std::map<Value*, PossibleFuncPtrSet> Env;
+    std::map<BasicBlock*, Env> envs;
+    Env *_currEnv;
+    Env argsEnv;  // We mix all args in one context, hope it not to go wrong
+    std::map<Instruction *, Value *> allocated;  // Record the value an allocating instruction created.
+#define currEnv (*_currEnv)
 
     bool runOnModule(Module &M) override;
 
     bool iterate(Module &M);
+
+    Env meet(BasicBlock *bb);
 
     bool dispatchInst(Instruction &inst);
 
@@ -63,6 +70,8 @@ public:
     // 输出相关
 
     void printSet(Value *v);
+
+    void printEnv(Env &env);
 
     void printCalls(Module &M);
 

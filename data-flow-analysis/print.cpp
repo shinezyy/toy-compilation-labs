@@ -16,6 +16,7 @@ void FuncPtrPass::printCalls(Module &module)
     bool first_line = true;
     for (auto &function: module.getFunctionList()) {
         for (auto &bb : function) {
+            _currEnv = &envs[&bb];
             for (auto &inst : bb) {
                 unsigned null_count = 0, pointer_count = 0;
                 if (auto callInst = dyn_cast<CallInst>(&inst)) {
