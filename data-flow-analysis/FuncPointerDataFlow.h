@@ -12,6 +12,8 @@
 #include <vector>
 #include <llvm/IR/Instructions.h>
 
+#include "log.h"
+
 
 ///!TODO TO BE COMPLETED BY YOU FOR ASSIGNMENT 3
 using namespace llvm;
@@ -26,6 +28,7 @@ public:
     std::map<BasicBlock*, Env> envs;
     Env *_currEnv;
     Env argsEnv;  // We mix all args in one context, hope it not to go wrong
+    Env returned;  // Record the values each func can return.
     std::map<Instruction *, Value *> allocated;  // Record the value an allocating instruction created.
 #define currEnv (*_currEnv)
 
@@ -78,6 +81,15 @@ public:
     // Note: this function can only be called once per log.
     static const char *nameOf(Value *v) {
         return v->getName().str().c_str();
+    }
+
+    raw_ostream& dbg() {
+        if (DEBUG_ALL) {
+            return llvm::errs();
+        }
+        else {
+            return llvm::nulls();
+        }
     }
 
 };

@@ -35,6 +35,7 @@ bool FuncPtrPass::iterate(Module &module)
     }
 
     Env oldArgsEnv = argsEnv;
+    auto oldReturned = returned;
 
     for (auto &function: module.getFunctionList()) {
         if (function.getBasicBlockList().empty()) continue;
@@ -80,8 +81,11 @@ bool FuncPtrPass::iterate(Module &module)
         }
     }
 
-    // Functions only care args changes.
-    return argsEnv != oldArgsEnv;
+    log(DEBUG, FuncVisit, "Returns");
+    printEnv(returned);
+
+    // Functions only care args and return values changes.
+    return argsEnv != oldArgsEnv || returned != oldReturned;
 }
 
 FuncPtrPass::Env FuncPtrPass::meet(BasicBlock *bb) {
@@ -187,7 +191,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
 
         // 把绑定到函数（返回值）上的指针集合并入call Inst
         if (callInst->getType()->isPointerTy()) {
-            auto updated_call_inst = setUnion(currEnv[callInst], currEnv[func]);
+            auto updated_call_inst = setUnion(currEnv[callInst], returned[func]);
             log(DEBUG, FuncVisit, "update call inst: %i", updated_call_inst);
             updated |= updated_call_inst;
         }
@@ -208,8 +212,12 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             PossibleFuncPtrSet &dst = argsEnv[&parameter];
             // 考虑arg是函数的情况,wrap一下
             auto updated_parameters = setUnion(dst, wrappedPtrSet(arg));
-            log(DEBUG, FuncVisit, "update parameters: %i", updated_parameters);
+            if (updated_parameters) {
+                dbg() << "update func " << func->getName() << "'s param " << parameter.getName()
+                << " with " << arg->getName() << "\n";
+            }
             updated |= updated_parameters;
+            arg_index++;
         }
     }
     return updated;
@@ -293,10 +301,10 @@ bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
         return false;
     }
 
+    log(DEBUG, FuncVisit, "return %s", nameOf(value));
+    printSet(value);
     Function *func = returnInst->getParent()->getParent();
-    checkInit(value);
-    checkInit(func);
-    return setUnion(currEnv[func], wrappedPtrSet(value));
+    return setUnion(returned[func], wrappedPtrSet(value));
 }
 
 bool FuncPtrPass::visitBitcast(BitCastInst *bitCastInst) {
