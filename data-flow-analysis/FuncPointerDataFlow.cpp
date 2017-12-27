@@ -36,6 +36,7 @@ bool FuncPtrPass::iterate(Module &module)
 
     Env oldArgsEnv = argsEnv;
     auto oldReturned = returned;
+    auto oldHeap = heapEnvPerFunc;
 
     for (auto &function: module.getFunctionList()) {
         if (function.getBasicBlockList().empty()) continue;
@@ -53,12 +54,13 @@ bool FuncPtrPass::iterate(Module &module)
                 Env in, out;
 
                 if (&bb == &function.getEntryBlock()) {  // pass arguments to entry block.
-                    in = argsEnv;
+                    in = passArgs(&function);
                 }
                 else {
                     logs(DEBUG, FuncVisit, "meet");
                     in = meet(&bb);
                 }
+                envUnion(in, heapEnvPerFunc[&function]);
 
                 logs(DEBUG, FuncVisit, "in");
                 printEnv(in);
@@ -85,7 +87,7 @@ bool FuncPtrPass::iterate(Module &module)
     printEnv(returned);
 
     // Functions only care args and return values changes.
-    return argsEnv != oldArgsEnv || returned != oldReturned;
+    return argsEnv != oldArgsEnv || returned != oldReturned || heapEnvPerFunc != oldHeap;
 }
 
 FuncPtrPass::Env FuncPtrPass::meet(BasicBlock *bb) {
@@ -199,7 +201,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
         // 把所有函数指针绑定到参数上去
         unsigned arg_index = 0;
         for (auto &parameter: func->args()) {
-            if (!isFunctionPointer(parameter.getType())) {
+            if (!parameter.getType()->isPointerTy() ) {
                 // 不是函数指针的不管
                 arg_index++;
                 continue;
@@ -219,6 +221,9 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             updated |= updated_parameters;
             arg_index++;
         }
+
+        // Pass current env as callee's heap env.
+        envUnion(heapEnvPerFunc[func], currEnv);
     }
     return updated;
 }
@@ -311,4 +316,20 @@ bool FuncPtrPass::visitBitcast(BitCastInst *bitCastInst) {
     Value *ope = bitCastInst->getOperand(0);
     log(DEBUG, FuncVisit, "bit cast %s", nameOf(ope));
     return setUnion(currEnv[bitCastInst], currEnv[ope]);
+}
+
+FuncPtrPass::Env FuncPtrPass::passArgs(Function *func) {
+    Env in;
+    for (auto &arg : func->args()) {
+        if (arg.getType()->isPointerTy()) {
+            in[&arg] = argsEnv[&arg];
+        }
+    }
+    return in;
+}
+
+void FuncPtrPass::envUnion(FuncPtrPass::Env &dst, const FuncPtrPass::Env &src) {
+    for (auto &pair : src) {
+        setUnion(dst[pair.first], pair.second);
+    }
 }

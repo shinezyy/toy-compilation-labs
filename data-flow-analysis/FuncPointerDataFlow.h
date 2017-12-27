@@ -29,6 +29,9 @@ public:
     Env *_currEnv;
     Env argsEnv;  // We mix all args in one context, hope it not to go wrong
     Env returned;  // Record the values each func can return.
+    // Record the possible contents of allocated values which can pass through functions implicitly.
+    // Updated before callsite.
+    std::map<Function *, Env> heapEnvPerFunc;
     std::map<Instruction *, Value *> allocated;  // Record the value an allocating instruction created.
 #define currEnv (*_currEnv)
 
@@ -58,6 +61,8 @@ public:
 
     Value *createAllocValue(Instruction *allloc);
 
+    Env passArgs(Function *func);
+
     // 下面是一些工具
 
     bool isFunctionPointer(Type *type);
@@ -69,6 +74,8 @@ public:
     bool setUnion(PossibleFuncPtrSet &dst, const PossibleFuncPtrSet &src);
 
     bool isLLVMBuiltIn(CallInst *callInst);
+
+    void envUnion(Env &dst, const Env &src);
 
     // 输出相关
 
