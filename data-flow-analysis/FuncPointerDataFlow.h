@@ -38,6 +38,8 @@ public:
 
     bool visitGetElementPtr(GetElementPtrInst* getElementPtrInst);
 
+    bool visitStore(StoreInst *storeInst);
+
     // 下面是一些工具
 
     bool isFunctionPointer(Type *type);

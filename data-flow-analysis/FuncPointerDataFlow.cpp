@@ -10,6 +10,18 @@
 #include "FuncPointerDataFlow.h"
 #include "log.h"
 
+class DummyValue: public Value {
+    static int count;
+public:
+    const int id;
+    explicit DummyValue(Type *ty): Value(ty, 0), id(++DummyValue::count) {}
+    static int idOf(Value *v) {
+        return ((DummyValue *)v)->id;
+    }
+};
+
+int DummyValue::count = 0;
+
 char FuncPtrPass::ID = 0;
 
 bool FuncPtrPass::runOnModule(Module &M)
@@ -45,6 +57,9 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
     }
     if (auto casted = dyn_cast<GetElementPtrInst>(&inst)) {
         return visitGetElementPtr(casted);
+    }
+    if (auto store = dyn_cast<StoreInst>(&inst)) {
+        return visitStore(store);
     }
     return false;
 }
@@ -99,11 +114,36 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
 
 bool FuncPtrPass::visitAlloc(AllocaInst *allocaInst)
 {
-    return false;
+    if (ptrSetMap.count(allocaInst) == 0) {
+        Value *p = new DummyValue(allocaInst->getType());
+        ptrSetMap[p];
+        ptrSetMap[allocaInst].insert(p);
+        return true;
+    }
+    else {
+        return false;
+    }
 }
 
 bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
 {
-    return false;
+    // Assume field insensitive
+    bool updated = false;
+    Value *ptr = getElementPtrInst->getOperand(0);
+    for (auto p : ptrSetMap[ptr]) {
+        updated = setUnion(ptrSetMap[getElementPtrInst], ptrSetMap[p]) || updated;
+    }
+    return updated;
 }
 
+
+bool FuncPtrPass::visitStore(StoreInst *storeInst) {
+    bool updated = false;
+    Value *src = storeInst->getOperand(0);
+    Value *dst = storeInst->getOperand(1);
+    for (auto p : ptrSetMap[dst]) {
+        updated = setUnion(ptrSetMap[p], ptrSetMap[src]) || updated;
+    }
+
+    return updated;
+}
