@@ -80,7 +80,7 @@ bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
 
 bool FuncPtrPass::visitCall(CallInst *callInst)
 {
-    if (isa<DbgValueInst>(callInst)) {
+    if (isLLVMBuiltIn(callInst)) {
         return false;
     }
     checkInit(callInst);

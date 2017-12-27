@@ -19,7 +19,7 @@ void FuncPtrPass::printCalls(Module &module)
             for (auto &inst : bb) {
                 unsigned null_count = 0, pointer_count = 0;
                 if (auto callInst = dyn_cast<CallInst>(&inst)) {
-                    if (isa<DbgValueInst>(callInst)) {
+                    if (isLLVMBuiltIn(callInst)) {
                         continue;
                     }
                     auto calledValue = callInst->getCalledValue();

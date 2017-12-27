@@ -50,9 +50,12 @@ public:
 
     bool setUnion(PossibleFuncPtrSet &dst, const PossibleFuncPtrSet &src);
 
+    bool isLLVMBuiltIn(CallInst *callInst);
+
     // 输出相关
 
     void printCalls(Module &M);
+
 };
 
 
