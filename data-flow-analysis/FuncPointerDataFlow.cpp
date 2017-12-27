@@ -46,6 +46,9 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
     if (auto casted = dyn_cast<GetElementPtrInst>(&inst)) {
         return visitGetElementPtr(casted);
     }
+    if (auto casted = dyn_cast<ReturnInst>(&inst)) {
+        return visitReturn(casted);
+    }
     return false;
 }
 
@@ -107,3 +110,11 @@ bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
     return false;
 }
 
+bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
+{
+    auto value = returnInst->getReturnValue();
+    Function *func = returnInst->getParent()->getParent();
+    checkInit(value);
+    checkInit(func);
+    return setUnion(ptrSetMap[func], wrappedPtrSet(value));
+}

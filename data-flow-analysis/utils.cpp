@@ -42,3 +42,4 @@ bool FuncPtrPass::setUnion(FuncPtrPass::PossibleFuncPtrSet &dst,
     return updated;
 }
 
+
