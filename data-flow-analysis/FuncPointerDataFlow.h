@@ -22,7 +22,7 @@ public:
     FuncPtrPass() : ModulePass(ID) {}
 
     typedef std::set<Value*> PossibleFuncPtrSet;
-    std::map<Value*, PossibleFuncPtrSet> ptrSetMap;
+    std::map<Value*, PossibleFuncPtrSet> ptrSetMap{};
 
     bool runOnModule(Module &M) override;
 
@@ -40,6 +40,8 @@ public:
 
     bool visitStore(StoreInst *storeInst);
 
+    bool visitReturn(ReturnInst *returnInst);
+
     // 下面是一些工具
 
     bool isFunctionPointer(Type *type);
@@ -49,6 +51,13 @@ public:
     void checkInit(Value *value);
 
     bool setUnion(PossibleFuncPtrSet &dst, const PossibleFuncPtrSet &src);
+
+    bool isLLVMBuiltIn(CallInst *callInst);
+
+    // 输出相关
+
+    void printCalls(Module &M);
+
 };
 
 

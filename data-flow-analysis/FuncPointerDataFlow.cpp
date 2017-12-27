@@ -11,29 +11,31 @@
 #include "log.h"
 
 class DummyValue: public Value {
-    static int count;
 public:
-    const int id;
-    explicit DummyValue(Type *ty): Value(ty, 0), id(++DummyValue::count) {}
-    static int idOf(Value *v) {
-        return ((DummyValue *)v)->id;
-    }
+    explicit DummyValue(Type *ty): Value(ty, 0) {}
 };
-
-int DummyValue::count = 0;
 
 char FuncPtrPass::ID = 0;
 
 bool FuncPtrPass::runOnModule(Module &M)
 {
     errs().write_escaped(M.getName()) << '\n';
-    iterate(M);
+
+    while(iterate(M));
+
+    printCalls(M);
     return false;
 }
 
 bool FuncPtrPass::iterate(Module &module)
 {
     bool updated = false;
+    if (DEBUG_ALL) {
+        for (unsigned i = 0; i < 80; i++) {
+            errs() << '=';
+        }
+        errs() << '\n';
+    }
     for (auto &function: module.getFunctionList()) {
         for (auto &bb: function) {
             for (auto &inst: bb) {
@@ -61,35 +63,57 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
     if (auto store = dyn_cast<StoreInst>(&inst)) {
         return visitStore(store);
     }
+    if (auto casted = dyn_cast<ReturnInst>(&inst)) {
+        return visitReturn(casted);
+    }
     return false;
 }
 
 bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
 {
-    return false;
+    if (!isFunctionPointer(phiNode->getType())) {
+        return false;
+    }
+    auto updated = false;
+    checkInit(phiNode);
+    for (unsigned incoming_index = 0, e = phiNode->getNumIncomingValues();
+            incoming_index != e; incoming_index++) {
+        updated |= setUnion(
+                ptrSetMap[phiNode],
+                wrappedPtrSet(phiNode->getIncomingValue(incoming_index)));
+    }
+    log(DEBUG, PhiVisit, "length of merged set: %lu", ptrSetMap[phiNode].size());
+    return updated;
 }
 
 bool FuncPtrPass::visitCall(CallInst *callInst)
 {
-    if (isa<DbgValueInst>(callInst)) {
+    if (isLLVMBuiltIn(callInst)) {
         return false;
     }
+    checkInit(callInst);
     bool updated = false;
-    auto called_value = callInst->getCalledValue();
     PossibleFuncPtrSet possible_func_ptr_set;
     // 让直接调用和间接调用的处理代码一致，所以把它包在一个set里面
-    if (called_value == nullptr) {
-        possible_func_ptr_set.insert(callInst->getCalledFunction());
+    if (auto func = callInst->getCalledFunction()) {
+        possible_func_ptr_set.insert(func);
     } else {
+        auto called_value = callInst->getCalledValue();
         possible_func_ptr_set = ptrSetMap[called_value];
     }
+    log(DEBUG, FuncVisit, "Size of func ptr set: %lu", possible_func_ptr_set.size());
 
     for (auto value: possible_func_ptr_set) {
         auto func = dyn_cast<Function>(value);
         if (!func) {
-            log(DEBUG, FuncVisit, "null ptr skipped");
+            logs(DEBUG, FuncVisit, "null ptr skipped");
             continue;
         }
+        checkInit(func);
+        // 把绑定到函数（返回值）上的指针集合并入call Inst
+        auto updated_call_inst = setUnion(ptrSetMap[callInst], ptrSetMap[func]);
+        log(DEBUG, FuncVisit, "update call inst: %i", updated_call_inst);
+        updated |= updated_call_inst;
 
         // 把所有函数指针绑定到参数上去
         unsigned arg_index = 0;
@@ -106,7 +130,9 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             auto arg = callInst->getOperand(arg_index);
             PossibleFuncPtrSet &dst = ptrSetMap[&parameter];
             // 考虑arg是函数的情况,wrap一下
-            updated |= setUnion(dst, wrappedPtrSet(arg));
+            auto updated_parameters = setUnion(dst, wrappedPtrSet(arg));
+            log(DEBUG, FuncVisit, "update parameters: %i", updated_parameters);
+            updated |= updated_parameters;
         }
     }
     return updated;
@@ -136,7 +162,6 @@ bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
     return updated;
 }
 
-
 bool FuncPtrPass::visitStore(StoreInst *storeInst) {
     bool updated = false;
     Value *src = storeInst->getOperand(0);
@@ -146,4 +171,13 @@ bool FuncPtrPass::visitStore(StoreInst *storeInst) {
     }
 
     return updated;
+}
+
+bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
+{
+    auto value = returnInst->getReturnValue();
+    Function *func = returnInst->getParent()->getParent();
+    checkInit(value);
+    checkInit(func);
+    return setUnion(ptrSetMap[func], wrappedPtrSet(value));
 }

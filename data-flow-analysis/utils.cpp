@@ -1,6 +1,7 @@
 //
 // Created by diamo on 2017/12/27.
 //
+#include <llvm/IR/IntrinsicInst.h>
 #include "FuncPointerDataFlow.h"
 
 bool FuncPtrPass::isFunctionPointer(Type *type)
@@ -14,7 +15,7 @@ bool FuncPtrPass::isFunctionPointer(Type *type)
 
 FuncPtrPass::PossibleFuncPtrSet FuncPtrPass::wrappedPtrSet(Value *value)
 {
-    if (auto func = dyn_cast<Function>(value)) {
+    if (isa<Function>(value)) {
         PossibleFuncPtrSet possibleFuncPtrSet;
         possibleFuncPtrSet.insert(value);
         return possibleFuncPtrSet;
@@ -41,4 +42,12 @@ bool FuncPtrPass::setUnion(FuncPtrPass::PossibleFuncPtrSet &dst,
     }
     return updated;
 }
+
+bool FuncPtrPass::isLLVMBuiltIn(CallInst *callInst)
+{
+    return isa<DbgValueInst>(callInst) ||
+           isa<DbgDeclareInst>(callInst) ||
+           isa<MemSetInst>(callInst);
+}
+
 
