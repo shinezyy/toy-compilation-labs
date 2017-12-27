@@ -44,7 +44,9 @@ public:
 
     bool visitReturn(ReturnInst *returnInst);
 
-    Value *createAllocValue(AllocaInst *allloc);
+    bool visitBitcast(BitCastInst *bitCastInst);
+
+    Value *createAllocValue(Instruction *allloc);
 
     // 下面是一些工具
 

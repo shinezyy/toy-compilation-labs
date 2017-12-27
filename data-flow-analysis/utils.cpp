@@ -5,6 +5,7 @@
 #include <llvm/IR/IntrinsicInst.h>
 #include <llvm/Support/raw_ostream.h>
 #include "FuncPointerDataFlow.h"
+#include "log.h"
 
 bool FuncPtrPass::isFunctionPointer(Type *type)
 {
@@ -53,14 +54,19 @@ bool FuncPtrPass::isLLVMBuiltIn(CallInst *callInst)
 }
 
 void FuncPtrPass::printSet(Value *v) {
-    std::stringstream ss;
-    std::string sep = "";
-    ss << "{ ";
-    for (auto p : ptrSetMap[v]) {
-        ss << sep << p->getName().str();
-        sep = ", ";
+    if (dyn_cast<Function>(v)) {
+        llvm::errs() << "{ " << v->getName() << " }\n";
     }
-    ss << " }\n";
-    llvm::errs() << ss.str();
+    else {
+        std::stringstream ss;
+        std::string sep = "";
+        ss << "{ ";
+        for (auto p : ptrSetMap[v]) {
+            ss << sep << p->getName().str();
+            sep = ", ";
+        }
+        ss << " }\n";
+        llvm::errs() << ss.str();
+    }
 }
 

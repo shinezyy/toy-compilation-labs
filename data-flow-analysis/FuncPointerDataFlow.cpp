@@ -67,6 +67,9 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
     if (auto casted = dyn_cast<ReturnInst>(&inst)) {
         return visitReturn(casted);
     }
+    if (auto bit = dyn_cast<BitCastInst>(&inst)) {
+        return visitBitcast(bit);
+    }
     return false;
 }
 
@@ -98,6 +101,18 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     // 让直接调用和间接调用的处理代码一致，所以把它包在一个set里面
     if (auto func = callInst->getCalledFunction()) {
         possible_func_ptr_set.insert(func);
+        // Handle malloc
+        if (func->getName() == "malloc") {
+            checkInit(callInst);
+            if (ptrSetMap[callInst].size() == 0) {
+                log(DEBUG, FuncVisit, "malloc");
+                Value *p = createAllocValue(callInst);
+                checkInit(p);
+                ptrSetMap[callInst].insert(p);
+                printSet(callInst);
+                updated = true;
+            }
+        }
     } else {
         auto called_value = callInst->getCalledValue();
         possible_func_ptr_set = ptrSetMap[called_value];
@@ -139,7 +154,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     return updated;
 }
 
-Value *FuncPtrPass::createAllocValue(AllocaInst *alloc) {
+Value *FuncPtrPass::createAllocValue(Instruction *alloc) {
     static int count = 0;
     char name[20];
     sprintf(name, "S%d", ++count);
@@ -214,4 +229,10 @@ bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
     checkInit(value);
     checkInit(func);
     return setUnion(ptrSetMap[func], wrappedPtrSet(value));
+}
+
+bool FuncPtrPass::visitBitcast(BitCastInst *bitCastInst) {
+    Value *ope = bitCastInst->getOperand(0);
+    log(DEBUG, FuncVisit, "bit cast %s", nameOf(ope));
+    return setUnion(ptrSetMap[bitCastInst], ptrSetMap[ope]);
 }
