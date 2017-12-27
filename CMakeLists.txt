@@ -32,6 +32,7 @@ set(SOURCE_FILES
         data-flow-analysis/log.h
         data-flow-analysis/FuncPointerDataFlow.cpp
         data-flow-analysis/FuncPointerDataFlow.h
+        data-flow-analysis/utils.cpp
         )
 
 include_directories(data-flow-analysis)

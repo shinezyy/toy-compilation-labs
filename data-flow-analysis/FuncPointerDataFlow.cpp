@@ -5,17 +5,17 @@
 
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/IntrinsicInst.h>
 
 #include "FuncPointerDataFlow.h"
+#include "log.h"
 
 char FuncPtrPass::ID = 0;
 
 bool FuncPtrPass::runOnModule(Module &M)
 {
-    errs() << "Hello: ";
     errs().write_escaped(M.getName()) << '\n';
-    M.dump();
-    errs() << "------------------------------\n";
+    iterate(M);
     return false;
 }
 
@@ -56,7 +56,45 @@ bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
 
 bool FuncPtrPass::visitCall(CallInst *callInst)
 {
-    return false;
+    if (isa<DbgValueInst>(callInst)) {
+        return false;
+    }
+    bool updated = false;
+    auto called_value = callInst->getCalledValue();
+    PossibleFuncPtrSet possible_func_ptr_set;
+    // 让直接调用和间接调用的处理代码一致，所以把它包在一个set里面
+    if (called_value == nullptr) {
+        possible_func_ptr_set.insert(callInst->getCalledFunction());
+    } else {
+        possible_func_ptr_set = ptrSetMap[called_value];
+    }
+
+    for (auto value: possible_func_ptr_set) {
+        auto func = dyn_cast<Function>(value);
+        if (!func) {
+            log(DEBUG, FuncVisit, "null ptr skipped");
+            continue;
+        }
+
+        // 把所有函数指针绑定到参数上去
+        unsigned arg_index = 0;
+        for (auto &parameter: func->args()) {
+            if (!isFunctionPointer(parameter.getType())) {
+                // 不是函数指针的不管
+                arg_index++;
+                continue;
+            }
+
+            // 形参的possible set检查、初始化
+            checkInit(&parameter);
+
+            auto arg = callInst->getOperand(arg_index);
+            PossibleFuncPtrSet &dst = ptrSetMap[&parameter];
+            // 考虑arg是函数的情况,wrap一下
+            updated |= setUnion(dst, wrappedPtrSet(arg));
+        }
+    }
+    return updated;
 }
 
 bool FuncPtrPass::visitAlloc(AllocaInst *allocaInst)
@@ -68,3 +106,4 @@ bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
 {
     return false;
 }
+

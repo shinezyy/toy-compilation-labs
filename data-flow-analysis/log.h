@@ -15,6 +15,8 @@ static const char *log_level_str[] = { "DEBUG", "INFO", "WARNING", "ERROR" };
 
 extern bool DEBUG_ALL;
 
+extern bool FuncVisit;
+
 
 #ifdef LOG_DEBUG
     #define log_it(fmt, level_str, ...) \
