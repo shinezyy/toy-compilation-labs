@@ -25,6 +25,12 @@ bool FuncPtrPass::runOnModule(Module &M)
 bool FuncPtrPass::iterate(Module &module)
 {
     bool updated = false;
+    if (DEBUG_ALL) {
+        for (unsigned i = 0; i < 80; i++) {
+            errs() << '=';
+        }
+        errs() << '\n';
+    }
     for (auto &function: module.getFunctionList()) {
         for (auto &bb: function) {
             for (auto &inst: bb) {
@@ -66,8 +72,9 @@ bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
             incoming_index != e; incoming_index++) {
         updated |= setUnion(
                 ptrSetMap[phiNode],
-                ptrSetMap[phiNode->getIncomingValue(incoming_index)]);
+                wrappedPtrSet(phiNode->getIncomingValue(incoming_index)));
     }
+    log(DEBUG, PhiVisit, "length of merged set: %lu", ptrSetMap[phiNode].size());
     return updated;
 }
 
@@ -78,24 +85,27 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     }
     checkInit(callInst);
     bool updated = false;
-    auto called_value = callInst->getCalledValue();
     PossibleFuncPtrSet possible_func_ptr_set;
     // 让直接调用和间接调用的处理代码一致，所以把它包在一个set里面
-    if (called_value == nullptr) {
-        possible_func_ptr_set.insert(callInst->getCalledFunction());
+    if (auto func = callInst->getCalledFunction()) {
+        possible_func_ptr_set.insert(func);
     } else {
+        auto called_value = callInst->getCalledValue();
         possible_func_ptr_set = ptrSetMap[called_value];
     }
+    log(DEBUG, FuncVisit, "Size of func ptr set: %lu", possible_func_ptr_set.size());
 
     for (auto value: possible_func_ptr_set) {
         auto func = dyn_cast<Function>(value);
         if (!func) {
-            log(DEBUG, FuncVisit, "null ptr skipped");
+            logs(DEBUG, FuncVisit, "null ptr skipped");
             continue;
         }
         checkInit(func);
-        // 把绑定到函数（返回值）上的指针集合并入
-        updated |= setUnion(ptrSetMap[called_value], ptrSetMap[func]);
+        // 把绑定到函数（返回值）上的指针集合并入call Inst
+        auto updated_call_inst = setUnion(ptrSetMap[callInst], ptrSetMap[func]);
+        log(DEBUG, FuncVisit, "update call inst: %i", updated_call_inst);
+        updated |= updated_call_inst;
 
         // 把所有函数指针绑定到参数上去
         unsigned arg_index = 0;
@@ -112,7 +122,9 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             auto arg = callInst->getOperand(arg_index);
             PossibleFuncPtrSet &dst = ptrSetMap[&parameter];
             // 考虑arg是函数的情况,wrap一下
-            updated |= setUnion(dst, wrappedPtrSet(arg));
+            auto updated_parameters = setUnion(dst, wrappedPtrSet(arg));
+            log(DEBUG, FuncVisit, "update parameters: %i", updated_parameters);
+            updated |= updated_parameters;
         }
     }
     return updated;
