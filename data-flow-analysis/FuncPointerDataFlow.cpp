@@ -279,7 +279,7 @@ bool FuncPtrPass::visitStore(StoreInst *storeInst) {
     printSet(dst);
     for (auto p : currEnv[dst]) {
         log(DEBUG, FuncVisit, "merge");
-        updated = setUnion(currEnv[p], wrappedPtrSet(src)) || updated;
+        currEnv[p] = wrappedPtrSet(src);
         printSet(p);
     }
 
