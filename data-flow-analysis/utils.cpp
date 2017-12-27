@@ -48,11 +48,12 @@ bool FuncPtrPass::isLLVMBuiltIn(CallInst *callInst)
 {
     return isa<DbgValueInst>(callInst) ||
            isa<DbgDeclareInst>(callInst) ||
-           isa<MemSetInst>(callInst);
+           isa<MemSetInst>(callInst) ||
+           isa<MemCpyInst>(callInst);
 }
 
 void FuncPtrPass::printSet(Value *v) {
-    if (dyn_cast<Function>(v)) {
+    if (DEBUG_ALL && PtrSet && dyn_cast<Function>(v)) {
         llvm::errs() << "{ " << v->getName() << " }\n";
     }
     else {
@@ -64,11 +65,14 @@ void FuncPtrPass::printSet(Value *v) {
             sep = ", ";
         }
         ss << " }\n";
-        llvm::errs() << ss.str();
+        if (DEBUG_ALL && PtrSet) {
+            llvm::errs() << ss.str();
+        }
     }
 }
 
 void FuncPtrPass::printEnv(FuncPtrPass::Env &env) {
+    if (!(EnvDebug && DEBUG_ALL)) return;
     for (auto &pair : env) {
         Value *key = pair.first;
         PossibleFuncPtrSet &set = pair.second;

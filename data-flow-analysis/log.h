@@ -19,6 +19,10 @@ extern bool FuncVisit;
 
 extern bool PhiVisit;
 
+extern bool PtrSet;
+
+extern bool EnvDebug;
+
 
 #ifdef LOG_DEBUG
     #define log_it(fmt, level_str, ...) \

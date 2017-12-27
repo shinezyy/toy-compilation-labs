@@ -55,11 +55,11 @@ bool FuncPtrPass::iterate(Module &module)
                     in = argsEnv;
                 }
                 else {
-                    log(DEBUG, FuncVisit, "meet");
+                    logs(DEBUG, FuncVisit, "meet");
                     in = meet(&bb);
                 }
 
-                log(DEBUG, FuncVisit, "in");
+                logs(DEBUG, FuncVisit, "in");
                 printEnv(in);
 
                 out = in;
@@ -69,11 +69,11 @@ bool FuncPtrPass::iterate(Module &module)
                     dispatchInst(inst);
                 }
 
-                log(DEBUG, FuncVisit, "out");
+                logs(DEBUG, FuncVisit, "out");
                 printEnv(out);
                 if (out != envs[&bb]) {
                     envs[&bb] = out;
-                    log(DEBUG, FuncVisit, "updated");
+                    logs(DEBUG, FuncVisit, "updated");
                     updated = true;
                 }
             }
@@ -163,7 +163,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
         if (func->getName() == "malloc") {
             checkInit(callInst);
             if (currEnv[callInst].empty()) {
-                log(DEBUG, FuncVisit, "malloc");
+                logs(DEBUG, FuncVisit, "malloc");
                 Value *p = createAllocValue(callInst);
                 checkInit(p);
                 currEnv[callInst].insert(p);
@@ -262,7 +262,7 @@ bool FuncPtrPass::visitLoad(LoadInst *loadInst) {
     log(DEBUG, FuncVisit, "load from %s", nameOf(src));
     log(DEBUG, FuncVisit, "to %d", loadInst->getValueID());
     for (auto p : currEnv[src]) {
-        log(DEBUG, FuncVisit, "merge");
+        logs(DEBUG, FuncVisit, "merge");
         updated = setUnion(currEnv[loadInst], currEnv[p]) || updated;
         printSet(loadInst);
     }
@@ -278,7 +278,7 @@ bool FuncPtrPass::visitStore(StoreInst *storeInst) {
     log(DEBUG, FuncVisit, "store dst: %s", nameOf(dst));
     printSet(dst);
     for (auto p : currEnv[dst]) {
-        log(DEBUG, FuncVisit, "merge");
+        logs(DEBUG, FuncVisit, "merge");
         updated = setUnion(currEnv[p], wrappedPtrSet(src)) || updated;
         printSet(p);
     }
