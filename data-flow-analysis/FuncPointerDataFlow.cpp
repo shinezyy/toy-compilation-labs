@@ -206,6 +206,10 @@ bool FuncPtrPass::visitStore(StoreInst *storeInst) {
 bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
 {
     auto value = returnInst->getReturnValue();
+    if (value == nullptr || !value->getType()->isPointerTy()) {
+        return false;
+    }
+
     Function *func = returnInst->getParent()->getParent();
     checkInit(value);
     checkInit(func);
