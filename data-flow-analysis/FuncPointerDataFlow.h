@@ -38,9 +38,13 @@ public:
 
     bool visitGetElementPtr(GetElementPtrInst* getElementPtrInst);
 
+    bool visitLoad(LoadInst *loadInst);
+
     bool visitStore(StoreInst *storeInst);
 
     bool visitReturn(ReturnInst *returnInst);
+
+    Value *createAllocValue(AllocaInst *allloc);
 
     // 下面是一些工具
 
@@ -56,7 +60,14 @@ public:
 
     // 输出相关
 
+    void printSet(Value *v);
+
     void printCalls(Module &M);
+
+    // Note: this function can only be called once per log.
+    static const char *nameOf(Value *v) {
+        return v->getName().str().c_str();
+    }
 
 };
 

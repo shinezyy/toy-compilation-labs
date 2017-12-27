@@ -1,7 +1,9 @@
 //
 // Created by diamo on 2017/12/27.
 //
+#include <sstream>
 #include <llvm/IR/IntrinsicInst.h>
+#include <llvm/Support/raw_ostream.h>
 #include "FuncPointerDataFlow.h"
 
 bool FuncPtrPass::isFunctionPointer(Type *type)
@@ -50,4 +52,15 @@ bool FuncPtrPass::isLLVMBuiltIn(CallInst *callInst)
            isa<MemSetInst>(callInst);
 }
 
+void FuncPtrPass::printSet(Value *v) {
+    std::stringstream ss;
+    std::string sep = "";
+    ss << "{ ";
+    for (auto p : ptrSetMap[v]) {
+        ss << sep << p->getName().str();
+        sep = ", ";
+    }
+    ss << " }\n";
+    llvm::errs() << ss.str();
+}
 

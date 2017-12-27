@@ -6,14 +6,10 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IntrinsicInst.h>
+#include <llvm/IR/LLVMContext.h>
 
 #include "FuncPointerDataFlow.h"
 #include "log.h"
-
-class DummyValue: public Value {
-public:
-    explicit DummyValue(Type *ty): Value(ty, 0) {}
-};
 
 char FuncPtrPass::ID = 0;
 
@@ -37,6 +33,8 @@ bool FuncPtrPass::iterate(Module &module)
         errs() << '\n';
     }
     for (auto &function: module.getFunctionList()) {
+        if (function.getBasicBlockList().size() == 0) continue;
+        log(DEBUG, FuncVisit, "visit function %s", nameOf(&function));
         for (auto &bb: function) {
             for (auto &inst: bb) {
                 updated |= dispatchInst(inst);
@@ -59,6 +57,9 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
     }
     if (auto casted = dyn_cast<GetElementPtrInst>(&inst)) {
         return visitGetElementPtr(casted);
+    }
+    if (auto load = dyn_cast<LoadInst>(&inst)) {
+        return visitLoad(load);
     }
     if (auto store = dyn_cast<StoreInst>(&inst)) {
         return visitStore(store);
@@ -138,12 +139,21 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     return updated;
 }
 
+Value *FuncPtrPass::createAllocValue(AllocaInst *alloc) {
+    static int count = 0;
+    char name[20];
+    sprintf(name, "S%d", ++count);
+    return new AllocaInst(IntegerType::get(alloc->getModule()->getContext(), 32), 10, name);
+}
+
 bool FuncPtrPass::visitAlloc(AllocaInst *allocaInst)
 {
+    log(DEBUG, FuncVisit, "alloc for %s", nameOf(allocaInst));
     if (ptrSetMap.count(allocaInst) == 0) {
-        Value *p = new DummyValue(allocaInst->getType());
+        Value *p = createAllocValue(allocaInst);
         ptrSetMap[p];
         ptrSetMap[allocaInst].insert(p);
+        printSet(allocaInst);
         return true;
     }
     else {
@@ -156,8 +166,22 @@ bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
     // Assume field insensitive
     bool updated = false;
     Value *ptr = getElementPtrInst->getOperand(0);
-    for (auto p : ptrSetMap[ptr]) {
-        updated = setUnion(ptrSetMap[getElementPtrInst], ptrSetMap[p]) || updated;
+    log(DEBUG, FuncVisit, "get elem of %s", nameOf(ptr));
+    log(DEBUG, FuncVisit, "to %s", nameOf(getElementPtrInst));
+    updated = setUnion(ptrSetMap[getElementPtrInst], ptrSetMap[ptr]) || updated;
+    printSet(getElementPtrInst);
+    return updated;
+}
+
+bool FuncPtrPass::visitLoad(LoadInst *loadInst) {
+    bool updated = false;
+    Value *src = loadInst->getOperand(0);
+    log(DEBUG, FuncVisit, "load from %s", nameOf(src));
+    log(DEBUG, FuncVisit, "to %d", loadInst->getValueID());
+    for (auto p : ptrSetMap[src]) {
+        log(DEBUG, FuncVisit, "merge");
+        updated = setUnion(ptrSetMap[loadInst], ptrSetMap[p]) || updated;
+        printSet(loadInst);
     }
     return updated;
 }
@@ -165,9 +189,15 @@ bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
 bool FuncPtrPass::visitStore(StoreInst *storeInst) {
     bool updated = false;
     Value *src = storeInst->getOperand(0);
+    log(DEBUG, FuncVisit, "store src: %s", nameOf(src));
+    printSet(src);
     Value *dst = storeInst->getOperand(1);
+    log(DEBUG, FuncVisit, "store dst: %s", nameOf(dst));
+    printSet(dst);
     for (auto p : ptrSetMap[dst]) {
-        updated = setUnion(ptrSetMap[p], ptrSetMap[src]) || updated;
+        log(DEBUG, FuncVisit, "merge");
+        updated = setUnion(ptrSetMap[p], wrappedPtrSet(src)) || updated;
+        printSet(p);
     }
 
     return updated;
