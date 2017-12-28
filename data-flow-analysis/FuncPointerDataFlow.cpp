@@ -216,6 +216,9 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             checkInit(&parameter);
 
             auto arg = callInst->getOperand(arg_index);
+            dbg() << "pass ";
+            printSet(wrappedPtrSet(arg));
+            dbg() << " to " << func->getName() << "'s " << parameter.getName() << "\n";
             argsEnv[func][callInst][&parameter] = wrappedPtrSet(arg);
             arg_index++;
         }
@@ -340,7 +343,7 @@ FuncPtrPass::Env FuncPtrPass::passArgs(Function *func) {
     for (auto &it : argsPerCallSite) {
         for (auto &arg : func->args()) {
             if (arg.getType()->isPointerTy()) {
-                in[&arg] = it.second[&arg];
+                setUnion(in[&arg], it.second[&arg]);
             }
         }
     }
