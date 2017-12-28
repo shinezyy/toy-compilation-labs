@@ -34,14 +34,15 @@ bool FuncPtrPass::iterate(Module &module)
         errs() << '\n';
     }
 
-    Env oldArgsEnv = argsEnv;
+    auto oldArgsEnv = argsEnv;
     auto oldReturned = returned;
     auto oldHeap = heapEnvPerFunc;
+    auto oldDirty = dirtyEnvPerFunc;
 
     for (auto &function: module.getFunctionList()) {
         if (function.getBasicBlockList().empty()) continue;
 
-        log(DEBUG, FuncVisit, "visit function %s", nameOf(&function));
+        dbg() << "visit function " << function.getName() << "\n";
 
         // Passing args
 
@@ -60,7 +61,10 @@ bool FuncPtrPass::iterate(Module &module)
                     logs(DEBUG, FuncVisit, "meet");
                     in = meet(&bb);
                 }
-                envUnion(in, heapEnvPerFunc[&function]);
+
+                for (const auto &it : heapEnvPerFunc[&function]) {
+                    envUnion(in, it.second);
+                }
 
                 logs(DEBUG, FuncVisit, "in");
                 printEnv(in);
@@ -87,7 +91,7 @@ bool FuncPtrPass::iterate(Module &module)
     printEnv(returned);
 
     // Functions only care args and return values changes.
-    return argsEnv != oldArgsEnv || returned != oldReturned || heapEnvPerFunc != oldHeap;
+    return argsEnv != oldArgsEnv || returned != oldReturned || heapEnvPerFunc != oldHeap || dirtyEnvPerFunc != oldDirty;
 }
 
 FuncPtrPass::Env FuncPtrPass::meet(BasicBlock *bb) {
@@ -183,6 +187,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     }
     log(DEBUG, FuncVisit, "Size of func ptr set: %lu", possible_func_ptr_set.size());
 
+    Env dirtyEnv;
     for (auto value: possible_func_ptr_set) {
         auto func = dyn_cast<Function>(value);
         if (!func) {
@@ -211,20 +216,18 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             checkInit(&parameter);
 
             auto arg = callInst->getOperand(arg_index);
-            PossibleFuncPtrSet &dst = argsEnv[&parameter];
-            // 考虑arg是函数的情况,wrap一下
-            auto updated_parameters = setUnion(dst, wrappedPtrSet(arg));
-            if (updated_parameters) {
-                dbg() << "update func " << func->getName() << "'s param " << parameter.getName()
-                << " with " << arg->getName() << "\n";
-            }
-            updated |= updated_parameters;
+            argsEnv[func][callInst][&parameter] = wrappedPtrSet(arg);
             arg_index++;
         }
 
         // Pass current env as callee's heap env.
-        envUnion(heapEnvPerFunc[func], currEnv);
+        heapEnvPerFunc[func][callInst] = currEnv;
+        // Fetch dirty data from this called function. Union all candidates
+        envUnion(dirtyEnv, dirtyEnvPerFunc[func]);
     }
+
+    updateEnv(currEnv, dirtyEnv);
+
     return updated;
 }
 
@@ -301,6 +304,20 @@ bool FuncPtrPass::visitStore(StoreInst *storeInst) {
 
 bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
 {
+    Function *func = returnInst->getParent()->getParent();
+
+    // Update dirty env.
+    if (dirtyEnvPerFunc[func] != currEnv) {
+        dbg() << "Previous dirty env of " << func->getName() << ":\n";
+        printEnv(dirtyEnvPerFunc[func]);
+
+        dirtyEnvPerFunc[func] = currEnv;
+
+        dbg() << "Update to dirty env:\n";
+        printEnv(currEnv);
+    }
+
+    // Update return value set.
     auto value = returnInst->getReturnValue();
     if (value == nullptr || !value->getType()->isPointerTy()) {
         return false;
@@ -308,7 +325,6 @@ bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
 
     log(DEBUG, FuncVisit, "return %s", nameOf(value));
     printSet(value);
-    Function *func = returnInst->getParent()->getParent();
     return setUnion(returned[func], wrappedPtrSet(value));
 }
 
@@ -320,9 +336,12 @@ bool FuncPtrPass::visitBitcast(BitCastInst *bitCastInst) {
 
 FuncPtrPass::Env FuncPtrPass::passArgs(Function *func) {
     Env in;
-    for (auto &arg : func->args()) {
-        if (arg.getType()->isPointerTy()) {
-            in[&arg] = argsEnv[&arg];
+    auto &argsPerCallSite = argsEnv[func];
+    for (auto &it : argsPerCallSite) {
+        for (auto &arg : func->args()) {
+            if (arg.getType()->isPointerTy()) {
+                in[&arg] = it.second[&arg];
+            }
         }
     }
     return in;
@@ -333,3 +352,22 @@ void FuncPtrPass::envUnion(FuncPtrPass::Env &dst, const FuncPtrPass::Env &src) {
         setUnion(dst[pair.first], pair.second);
     }
 }
+
+void FuncPtrPass::updateEnv(FuncPtrPass::Env &dst, const FuncPtrPass::Env &src) {
+    for (auto &pair : dst) {
+        if (!src.count(pair.first)) {
+            continue;
+        }
+        const auto &set = *src.find(pair.first);
+        if (set.second != pair.second) {
+            dbg() << "update value " << pair.first->getName() << ": ";
+            dbg() << "from ";
+            printSet(dst[pair.first]);
+            dst[pair.first] = set.second;
+            dbg() << " to ";
+            printSet(dst[pair.first]);
+            dbg() << "\n";
+        }
+    }
+}
+

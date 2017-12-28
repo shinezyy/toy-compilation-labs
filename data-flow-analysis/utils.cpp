@@ -95,3 +95,16 @@ void FuncPtrPass::printEnv(FuncPtrPass::Env &env) {
     }
 }
 
+
+void FuncPtrPass::printSet(const FuncPtrPass::PossibleFuncPtrSet &s) {
+    std::stringstream ss;
+    std::string sep = "";
+    ss << "{ ";
+    for (auto p : s) {
+        ss << sep << p->getName().str();
+        sep = ", ";    }
+    ss << " }";
+    if (DEBUG_ALL && PtrSet) {
+        llvm::errs() << ss.str();
+    }
+}

@@ -27,11 +27,15 @@ public:
     typedef std::map<Value*, PossibleFuncPtrSet> Env;
     std::map<BasicBlock*, Env> envs;
     Env *_currEnv;
-    Env argsEnv;  // We mix all args in one context, hope it not to go wrong
+    std::map<Function *, std::map<Instruction *, Env>> argsEnv;  // We mix all args in one context, hope it not to go wrong
     Env returned;  // Record the values each func can return.
     // Record the possible contents of allocated values which can pass through functions implicitly.
     // Updated before callsite.
-    std::map<Function *, Env> heapEnvPerFunc;
+    // Override each callsite, union different callsite.
+    std::map<Function *, std::map<Instruction *, Env>> heapEnvPerFunc;
+    // Record the modification of the memory by each function, which should be visible to their callers.
+    // We assume each function exit at the ret inst, and update this container using currEnv.
+    std::map<Function *, Env> dirtyEnvPerFunc;
     std::map<Instruction *, Value *> allocated;  // Record the value an allocating instruction created.
 #define currEnv (*_currEnv)
 
@@ -77,9 +81,14 @@ public:
 
     void envUnion(Env &dst, const Env &src);
 
+    // For each key in dst, if src has this key, override the content.
+    void updateEnv(Env &dst, const Env &src);
+
     // 输出相关
 
     void printSet(Value *v);
+
+    void printSet(const PossibleFuncPtrSet &s);
 
     void printEnv(Env &env);
 
