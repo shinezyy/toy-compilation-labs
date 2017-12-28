@@ -240,6 +240,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
         // Pass current env as callee's heap env.
         auto &myOldProvide = heapEnvPerFunc[func][callInst];
         if (myOldProvide != currEnv) {
+            dbg() << "update heap env of func " << func->getName() << " by call " << callInst->getName() << "\n";
             myOldProvide = currEnv;
         }
         else {
@@ -248,6 +249,13 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             dbg() << "dirty env of " << func->getName() << ":\n";
             printEnv(dirtyEnvPerFunc[func]);
             dbg() << "end\n";
+        }
+    }
+
+    for (auto &kv : heapEnvPerFunc) {
+        if (possible_func_ptr_set.count(kv.first) == 0 && kv.second.count(callInst) != 0) {
+            dbg() << "clear false call site " << callInst->getName() << " for func " << kv.first->getName() << "\n";
+            kv.second[callInst].clear();
         }
     }
 
