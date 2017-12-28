@@ -241,7 +241,18 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
         auto &myOldProvide = heapEnvPerFunc[func][callInst];
         if (myOldProvide != currEnv) {
             dbg() << "update heap env of func " << func->getName() << " by call " << callInst->getName() << "\n";
+            myOldProvide.clear();
+#if 0
+            for (auto &kv : currEnv) {
+                auto *value = kv.first;
+                auto &set = kv.second;
+                if (allocatedValues.count(value) > 0) {
+                    myOldProvide[value] = set;
+                }
+            }
+#else
             myOldProvide = currEnv;
+#endif
         }
         else {
             // Fetch dirty data from this called function. Union all candidates
@@ -275,14 +286,15 @@ Value *FuncPtrPass::createAllocValue(Instruction *alloc) {
         sprintf(name, "S%d", ++count);
         Value *v = new AllocaInst(IntegerType::get(alloc->getModule()->getContext(), 32), 10, name);
         allocated[alloc] = v;
+        allocatedValues.insert(v);
         return v;
     }
 }
 
 bool FuncPtrPass::visitAlloc(AllocaInst *allocaInst)
 {
-    log(DEBUG, FuncVisit, "alloc for %s", nameOf(allocaInst));
     if (currEnv.count(allocaInst) == 0) {
+        log(DEBUG, FuncVisit, "alloc for %s", nameOf(allocaInst));
         Value *p = createAllocValue(allocaInst);
         currEnv[p];
         currEnv[allocaInst].insert(p);
@@ -301,7 +313,8 @@ bool FuncPtrPass::visitGetElementPtr(GetElementPtrInst *getElementPtrInst)
     Value *ptr = getElementPtrInst->getOperand(0);
     log(DEBUG, FuncVisit, "get elem of %s", nameOf(ptr));
     log(DEBUG, FuncVisit, "to %s", nameOf(getElementPtrInst));
-    updated = setUnion(currEnv[getElementPtrInst], currEnv[ptr]) || updated;
+    updated = setUnion(currEnv[getElementPtrInst], currEnv[ptr]);
+    if (updated) markDirty(getElementPtrInst);
     printSet(getElementPtrInst);
     return updated;
 }
@@ -313,7 +326,8 @@ bool FuncPtrPass::visitLoad(LoadInst *loadInst) {
     log(DEBUG, FuncVisit, "to %d", loadInst->getValueID());
     for (auto p : currEnv[src]) {
         logs(DEBUG, FuncVisit, "merge");
-        updated = setUnion(currEnv[loadInst], currEnv[p]) || updated;
+        updated = setUnion(currEnv[loadInst], currEnv[p]);
+        if (updated) markDirty(loadInst);
         printSet(loadInst);
     }
     return updated;
@@ -330,6 +344,7 @@ bool FuncPtrPass::visitStore(StoreInst *storeInst) {
     for (auto p : currEnv[dst]) {
         logs(DEBUG, FuncVisit, "merge");
         currEnv[p] = wrappedPtrSet(src);
+        markDirty(p);
         printSet(p);
     }
 
@@ -344,6 +359,9 @@ bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
     for (const auto &it : heapEnvPerFunc[func]) {
         envUnion(heap, it.second);
     }
+
+    // Update dirty env.
+#if 0
     dirtyEnvPerFunc[func].clear();
     for (auto &kv : heap) {
         if (currEnv[kv.first] != kv.second) {
@@ -351,16 +369,29 @@ bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
             dirtyEnvPerFunc[func][kv.first] = currEnv[kv.first];
         }
     }
-    // Update dirty env.
-    // if (dirtyEnvPerFunc[func] != currEnv) {
-    //     dbg() << "Previous dirty env of " << func->getName() << ":\n";
-    //     printEnv(dirtyEnvPerFunc[func]);
+#else
+    bool hasPointerArgs = false;
+    for (auto &arg : func->args()) {
+        if (arg.getType()->isPointerTy()) {
+            hasPointerArgs = true;
+            break;
+        }
+    }
+    if (hasPointerArgs) {
+        if (dirtyEnvPerFunc[func] != currEnv) {
+            dbg() << "Previous dirty env of " << func->getName() << ":\n";
+            printEnv(dirtyEnvPerFunc[func]);
 
-    //     dirtyEnvPerFunc[func] = currEnv;
+            dirtyEnvPerFunc[func] = currEnv;
 
-    //     dbg() << "Update to dirty env:\n";
-    //     printEnv(currEnv);
-    // }
+            dbg() << "Update to dirty env:\n";
+            printEnv(currEnv);
+        }
+    }
+    else {
+        dirtyEnvPerFunc[func].clear();
+    }
+#endif
 
     // Update return value set.
     auto value = returnInst->getReturnValue();
@@ -424,7 +455,9 @@ bool FuncPtrPass::visitMemCopy(MemCpyInst *copyInst)
     for (auto d: currEnv[dst]) {
         currEnv[d].clear();
         for (auto s: currEnv[src]) {
-            setUnion(currEnv[d], wrappedPtrSet(s));
+            if (setUnion(currEnv[d], wrappedPtrSet(s))) {
+                markDirty(d);
+            }
         }
     }
     return false;

@@ -1,4 +1,4 @@
-bool DEBUG_ALL = true;
+bool DEBUG_ALL = false;
 
 bool FuncVisit = true;
 

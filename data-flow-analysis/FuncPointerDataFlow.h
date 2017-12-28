@@ -38,6 +38,9 @@ public:
     // We assume each function exit at the ret inst, and update this container using currEnv.
     std::map<Function *, Env> dirtyEnvPerFunc;
     std::map<Instruction *, Value *> allocated;  // Record the value an allocating instruction created.
+    std::set<Value *> allocatedValues;  // Record values dyn allocated
+    std::set<Value *> dirtyValues; // during a function...
+    void markDirty(Value *p) { dirtyValues.insert(p); }
 #define currEnv (*_currEnv)
 
     bool runOnModule(Module &M) override;
