@@ -42,7 +42,8 @@ bool FuncPtrPass::iterate(Module &module)
     for (auto &function: module.getFunctionList()) {
         if (function.getBasicBlockList().empty()) continue;
 
-        dbg() << "visit function " << function.getName() << "\n";
+        dbg() << "visit function " << function.getName()
+              << "------------------------------------------\n";
 
         // Passing args
 
@@ -87,7 +88,7 @@ bool FuncPtrPass::iterate(Module &module)
         }
     }
 
-    log(DEBUG, FuncVisit, "Returns");
+    logs(DEBUG, FuncVisit, "Returns");
     printEnv(returned);
 
     // Functions only care args and return values changes.
@@ -137,7 +138,8 @@ bool FuncPtrPass::dispatchInst(Instruction &inst)
 bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
 {
     if (!isFunctionPointer(phiNode->getType())) {
-        return false;
+        log(DEBUG, PhiVisit, "Encountered non-func-pointer phi node: %s",
+            nameOf(phiNode));
     }
     auto updated = false;
     checkInit(phiNode);
