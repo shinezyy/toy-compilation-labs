@@ -23,6 +23,8 @@ extern bool PtrSet;
 
 extern bool EnvDebug;
 
+extern bool LdStVisit;
+
 
 #ifdef LOG_DEBUG
     #define log_it(fmt, level_str, ...) \

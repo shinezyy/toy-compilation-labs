@@ -11,6 +11,7 @@
 #include <set>
 #include <vector>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
 
 #include "log.h"
 
@@ -62,6 +63,8 @@ public:
     bool visitReturn(ReturnInst *returnInst);
 
     bool visitBitcast(BitCastInst *bitCastInst);
+
+    bool visitMemCopy(MemCpyInst *copyInst);
 
     Value *createAllocValue(Instruction *allloc);
 

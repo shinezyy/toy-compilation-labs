@@ -159,7 +159,11 @@ bool FuncPtrPass::visitPhiNode(PHINode *phiNode)
 bool FuncPtrPass::visitCall(CallInst *callInst)
 {
     if (isLLVMBuiltIn(callInst)) {
-        return false;
+        if (auto copyInst = dyn_cast<MemCpyInst>(callInst)) {
+            return visitMemCopy(copyInst);
+        } else {
+            return false;
+        }
     }
 
     checkInit(callInst);
@@ -189,6 +193,13 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
     }
     log(DEBUG, FuncVisit, "Size of func ptr set: %lu", possible_func_ptr_set.size());
 
+
+    // Reset all funcs' dirty env provided by this callsite,
+    // as this call might not be some func's callsite anymore.
+    // for (auto &heapPerCall : heapEnvPerFunc) {
+    //     heapPerCall.second[callInst].clear();
+    // }
+
     Env dirtyEnv;
     for (auto value: possible_func_ptr_set) {
         auto func = dyn_cast<Function>(value);
@@ -204,6 +215,7 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
             log(DEBUG, FuncVisit, "update call inst: %i", updated_call_inst);
             updated |= updated_call_inst;
         }
+
 
         // 把所有函数指针绑定到参数上去
         unsigned arg_index = 0;
@@ -226,10 +238,19 @@ bool FuncPtrPass::visitCall(CallInst *callInst)
         }
 
         // Pass current env as callee's heap env.
-        heapEnvPerFunc[func][callInst] = currEnv;
-        // Fetch dirty data from this called function. Union all candidates
-        envUnion(dirtyEnv, dirtyEnvPerFunc[func]);
+        auto &myOldProvide = heapEnvPerFunc[func][callInst];
+        if (myOldProvide != currEnv) {
+            myOldProvide = currEnv;
+        }
+        else {
+            // Fetch dirty data from this called function. Union all candidates
+            envUnion(dirtyEnv, dirtyEnvPerFunc[func]);
+            dbg() << "dirty env of " << func->getName() << ":\n";
+            printEnv(dirtyEnvPerFunc[func]);
+            dbg() << "end\n";
+        }
     }
+
 
     updateEnv(currEnv, dirtyEnv);
 
@@ -311,16 +332,27 @@ bool FuncPtrPass::visitReturn(ReturnInst *returnInst)
 {
     Function *func = returnInst->getParent()->getParent();
 
-    // Update dirty env.
-    if (dirtyEnvPerFunc[func] != currEnv) {
-        dbg() << "Previous dirty env of " << func->getName() << ":\n";
-        printEnv(dirtyEnvPerFunc[func]);
-
-        dirtyEnvPerFunc[func] = currEnv;
-
-        dbg() << "Update to dirty env:\n";
-        printEnv(currEnv);
+    Env heap;
+    for (const auto &it : heapEnvPerFunc[func]) {
+        envUnion(heap, it.second);
     }
+    dirtyEnvPerFunc[func].clear();
+    for (auto &kv : heap) {
+        if (currEnv[kv.first] != kv.second) {
+            dbg() << "func " << func->getName() << " dirty value: " << kv.first->getName() << "\n";
+            dirtyEnvPerFunc[func][kv.first] = currEnv[kv.first];
+        }
+    }
+    // Update dirty env.
+    // if (dirtyEnvPerFunc[func] != currEnv) {
+    //     dbg() << "Previous dirty env of " << func->getName() << ":\n";
+    //     printEnv(dirtyEnvPerFunc[func]);
+
+    //     dirtyEnvPerFunc[func] = currEnv;
+
+    //     dbg() << "Update to dirty env:\n";
+    //     printEnv(currEnv);
+    // }
 
     // Update return value set.
     auto value = returnInst->getReturnValue();
@@ -374,5 +406,19 @@ void FuncPtrPass::updateEnv(FuncPtrPass::Env &dst, const FuncPtrPass::Env &src) 
             dbg() << "\n";
         }
     }
+}
+
+bool FuncPtrPass::visitMemCopy(MemCpyInst *copyInst)
+{
+    logs(DEBUG, LdStVisit, "Visit MemCopy!");
+    auto src = copyInst->getSource();
+    auto dst = copyInst->getDest();
+    for (auto d: currEnv[dst]) {
+        currEnv[d].clear();
+        for (auto s: currEnv[src]) {
+            setUnion(currEnv[d], wrappedPtrSet(s));
+        }
+    }
+    return false;
 }
 
