@@ -463,3 +463,13 @@ bool FuncPtrPass::visitMemCopy(MemCpyInst *copyInst)
     return false;
 }
 
+raw_ostream &FuncPtrPass::dbg()
+{
+    if (DEBUG_ALL) {
+        return llvm::errs();
+    }
+    else {
+        return llvm::nulls();
+    }
+}
+

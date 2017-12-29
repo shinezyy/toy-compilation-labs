@@ -13,8 +13,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/IntrinsicInst.h>
 
-#include "log.h"
-
 
 ///!TODO TO BE COMPLETED BY YOU FOR ASSIGNMENT 3
 using namespace llvm;
@@ -105,14 +103,7 @@ public:
         return v->getName().str().c_str();
     }
 
-    raw_ostream& dbg() {
-        if (DEBUG_ALL) {
-            return llvm::errs();
-        }
-        else {
-            return llvm::nulls();
-        }
-    }
+    raw_ostream& dbg();
 
 };
 

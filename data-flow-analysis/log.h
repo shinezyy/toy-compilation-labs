@@ -9,9 +9,9 @@
 
 enum log_level { DEBUG = 0, INFO, WARNING, ERROR };
 
-static enum log_level this_log_level = DEBUG;
+extern enum log_level this_log_level;
 
-static const char *log_level_str[] = { "DEBUG", "INFO", "WARNING", "ERROR" };
+extern const char *log_level_str[];
 
 extern bool DEBUG_ALL;
 
